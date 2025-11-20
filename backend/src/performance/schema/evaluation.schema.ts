@@ -28,6 +28,9 @@ ratings: { criterion: string; score: number }[];
   @Prop({ default: '' })
 comments: string;
 
+@Prop({ default: false })
+ acknowledged: boolean;
+ 
   @Prop({ enum: ['Pending', 'Submitted', 'Finalized'], default: 'Pending' })
 status: string;
 }
