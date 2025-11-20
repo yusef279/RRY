@@ -9,17 +9,17 @@ export class Dispute {
   @Prop({ type: Types.ObjectId, ref: 'Evaluation', required: true })
   evaluationId: Types.ObjectId;
 
-  @Prop({ required: true })
-  employeeId: number;
+  //@Prop({ required: true })
+  //employeeId: number;
 
   @Prop({ required: true })
   reason: string;
 
-  @Prop()
-  hrDecision: string;
+  @Prop({ default: '' })
+hrDecision: string;
 
-  @Prop({ default: 'Open' })
-  status: string; // Open, Resolved
+  @Prop({ enum: ['Pending','Resolved','Rejected'], default: 'Pending' })
+status: string;
 }
 
 export const DisputeSchema = SchemaFactory.createForClass(Dispute);

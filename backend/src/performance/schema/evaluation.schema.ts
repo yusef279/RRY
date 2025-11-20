@@ -6,26 +6,30 @@ export type EvaluationDocument = Evaluation & Document;
 
 @Schema({ timestamps: true })
 export class Evaluation {
-  @Prop({ required: true })
-  employeeId: number; // can be replaced with ObjectId later
+  @Prop({ type: Types.ObjectId, ref: 'Employee', required: true })
+employeeId: Types.ObjectId;
 
-  @Prop({ required: true })
-  managerId: number;
+  @Prop({ type: Types.ObjectId, ref: 'Employee', required: true })
+managerId: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: 'Template', required: true })
   templateId: Types.ObjectId;
 
-  @Prop([{ 
-    criterion: { type: String, required: true },
-    score: { type: Number, required: true } 
-  }])
-  ratings: { criterion: string; score: number }[];
+  @Prop({
+type: [
+{
+criterion: { type: String, required: true },
+score: { type: Number, required: true },
+},
+],
+})
+ratings: { criterion: string; score: number }[];
 
-  @Prop()
-  comments: string;
+  @Prop({ default: '' })
+comments: string;
 
-  @Prop({ default: 'Pending' })
-  status: string; // Pending, Submitted, Finalized
+  @Prop({ enum: ['Pending', 'Submitted', 'Finalized'], default: 'Pending' })
+status: string;
 }
 
 export const EvaluationSchema = SchemaFactory.createForClass(Evaluation);

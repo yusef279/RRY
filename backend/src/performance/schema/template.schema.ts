@@ -1,25 +1,22 @@
-// src/performance/schemas/template.schema.ts
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
+
 
 export type TemplateDocument = Template & Document;
 
 @Schema({ timestamps: true })
 export class Template {
-  @Prop({ required: true })
-  name: string;
+@Prop({ required: true })
+name: string;
 
-  @Prop({ required: true })
-  department: string;
+@Prop({ type: [String], required: true })
+criteria: string[];
 
-  @Prop({ required: true })
-  appraisalType: string; // e.g., Annual, Probation
+@Prop({ required: true })
+ratingScale: number;
 
-  @Prop([{ 
-    criterion: { type: String, required: true }, 
-    maxScore: { type: Number, required: true } 
-  }])
-  criteria: { criterion: string; maxScore: number }[];
+@Prop({ type: [Types.ObjectId], ref: 'Department', default: [] })
+departmentIds: Types.ObjectId[];
 }
 
 export const TemplateSchema = SchemaFactory.createForClass(Template);
