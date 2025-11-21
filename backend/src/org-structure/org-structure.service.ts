@@ -23,4 +23,6 @@ export class OrgStructureService {
   }
 
   renameDept(id: string, newName: string) {
-    return { ok: true, msg: 'dummy dept renamed'
+    return { ok: true, msg: 'dummy dept renamed'};
+ } 
+}
