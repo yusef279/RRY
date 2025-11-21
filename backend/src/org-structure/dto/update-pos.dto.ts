@@ -1,5 +1,5 @@
-// src/org-structure/dto/update-position.dto.ts
-import { IsOptional, IsString, IsBoolean } from 'class-validator';
+import { IsOptional, IsString, IsBoolean, IsNumber } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class UpdatePositionDto {
   @IsOptional()
@@ -12,7 +12,12 @@ export class UpdatePositionDto {
 
   @IsOptional()
   @IsString()
-  departmentId?: string; // reference to the department
+  departmentId?: string; // reference to Department
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  payGrade?: number;
 
   @IsOptional()
   @IsBoolean()
@@ -20,5 +25,5 @@ export class UpdatePositionDto {
 
   @IsOptional()
   @IsBoolean()
-  isFilled?: boolean;
+  isVacant?: boolean;
 }

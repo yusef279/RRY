@@ -1,5 +1,3 @@
-// src/org-structure/org-structure.controller.ts
-
 import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { OrgStructureService } from './org-structure.service';
 import { CreateDepartmentDto } from './dto/create-dep.dto';
@@ -30,7 +28,10 @@ export class OrgStructureController {
   }
 
   @Patch('departments/:id')
-  updateDepartment(@Param('id') id: string, @Body() dto: UpdateDepartmentDto) {
+  updateDepartment(
+    @Param('id') id: string,
+    @Body() dto: UpdateDepartmentDto,
+  ) {
     return this.svc.updateDepartment(id, dto);
   }
 
@@ -58,7 +59,10 @@ export class OrgStructureController {
   }
 
   @Patch('positions/:id')
-  updatePosition(@Param('id') id: string, @Body() dto: UpdatePositionDto) {
+  updatePosition(
+    @Param('id') id: string,
+    @Body() dto: UpdatePositionDto,
+  ) {
     return this.svc.updatePosition(id, dto);
   }
 

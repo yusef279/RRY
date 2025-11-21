@@ -1,5 +1,3 @@
-// src/org-structure/org-structure.module.ts
-
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 

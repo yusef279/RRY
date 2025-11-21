@@ -1,18 +1,20 @@
-// src/org-structure/dto/create-dep.dto.ts
-import { IsString, IsOptional, IsBoolean } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsNotEmpty } from 'class-validator';
 
 export class CreateDepartmentDto {
   @IsString()
+  @IsNotEmpty()
   name: string;
 
   @IsString()
+  @IsNotEmpty()
   code: string;
 
   @IsOptional()
   @IsString()
   description?: string;
 
+  // Optional – default can be true in the schema
   @IsOptional()
   @IsBoolean()
-  active?: boolean;
+  isActive?: boolean;
 }

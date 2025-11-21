@@ -1,5 +1,5 @@
-// src/org-structure/dto/update-dep.dto.ts
-import { IsOptional, IsString, IsBoolean } from 'class-validator';
+import { IsOptional, IsString, IsBoolean, IsDate } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class UpdateDepartmentDto {
   @IsOptional()
@@ -16,8 +16,11 @@ export class UpdateDepartmentDto {
 
   @IsOptional()
   @IsBoolean()
-  active?: boolean;
+  isActive?: boolean;
 
+  // Used for delimiting/closing a department
   @IsOptional()
+  @Type(() => Date)
+  @IsDate()
   closedDate?: Date | null;
 }

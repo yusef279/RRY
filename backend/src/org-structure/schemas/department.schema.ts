@@ -5,7 +5,6 @@ export type DepartmentDocument = Department & Document;
 
 @Schema({ timestamps: true })
 export class Department {
-
   @Prop({ required: true })
   name: string;
 
@@ -15,12 +14,12 @@ export class Department {
   @Prop()
   description: string;
 
+  // ALIGN BOTH DTO + SERVICE + DB
   @Prop({ default: true })
-  active: boolean;
+  isActive: boolean;
 
   @Prop({ type: Date, default: null })
   closedDate: Date | null;
-
 }
 
 export const DepartmentSchema = SchemaFactory.createForClass(Department);
