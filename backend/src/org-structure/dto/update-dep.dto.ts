@@ -1,4 +1,4 @@
-// src/org-structure/dto/update-department.dto.ts
+// src/org-structure/dto/update-dep.dto.ts
 import { IsOptional, IsString, IsBoolean } from 'class-validator';
 
 export class UpdateDepartmentDto {
@@ -8,9 +8,16 @@ export class UpdateDepartmentDto {
 
   @IsOptional()
   @IsString()
+  code?: string;
+
+  @IsOptional()
+  @IsString()
   description?: string;
 
   @IsOptional()
   @IsBoolean()
-  isActive?: boolean;
+  active?: boolean;
+
+  @IsOptional()
+  closedDate?: Date | null;
 }

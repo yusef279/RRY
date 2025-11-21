@@ -1,10 +1,18 @@
-import { IsNotEmpty, IsString } from 'class-validator';
+// src/org-structure/dto/create-dep.dto.ts
+import { IsString, IsOptional, IsBoolean } from 'class-validator';
 
 export class CreateDepartmentDto {
   @IsString()
-  @IsNotEmpty()
   name: string;
 
   @IsString()
-  parentDeptId?: string; // optional for sub-departments
+  code: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  active?: boolean;
 }

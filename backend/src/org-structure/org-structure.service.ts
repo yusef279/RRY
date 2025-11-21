@@ -2,13 +2,26 @@
 
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model,Types } from 'mongoose';
 import { Department, DepartmentDocument } from './schemas/department.schema';
 import { Position, PositionDocument } from './schemas/position.schema';
 import { CreateDepartmentDto } from './dto/create-dep.dto';
 import { UpdateDepartmentDto } from './dto/update-dep.dto';
 import { CreatePositionDto } from './dto/create-pos.dto';
 import { UpdatePositionDto } from './dto/update-pos.dto';
+
+export type PositionNode = {
+  _id: string;
+  title?: string;
+  departmentId?: string | Types.ObjectId;
+  reportsTo?: string;
+  isActive?: boolean;
+  isVacant?: boolean;
+  employeeAssigned?: string;
+  payGrade?: string;
+  children: PositionNode[];
+  [key: string]: any;
+};
 
 @Injectable()
 export class OrgStructureService {
@@ -109,22 +122,31 @@ export class OrgStructureService {
   }
 
   // ORG CHART TREE
-  async getTree() {
+  async getTree(): Promise<PositionNode[]> {
     const positions = await this.posModel.find().lean();
-    const map = new Map();
 
-    positions.forEach((p) =>
-      map.set(p._id.toString(), { ...p, children: [] }),
-    );
+    const map = new Map<string, PositionNode>();
 
-    const roots = [];
+    // Convert _id and reportsTo to strings
+    positions.forEach((p) => {
+      map.set(p._id.toString(), {
+        ...p,
+        _id: p._id.toString(),
+        reportsTo: p.reportsTo?.toString(),
+        children: [],
+      });
+    });
+
+    const roots: PositionNode[] = [];
 
     positions.forEach((p) => {
-      if (p.reportsTo) {
-        const parent = map.get(p.reportsTo.toString());
-        if (parent) parent.children.push(map.get(p._id.toString()));
+      const node = map.get(p._id.toString())!;
+      if (node.reportsTo) {
+        const parent = map.get(node.reportsTo);
+        if (parent) parent.children.push(node);
+        else roots.push(node);
       } else {
-        roots.push(map.get(p._id.toString()));
+        roots.push(node);
       }
     });
 
