@@ -8,6 +8,8 @@ import { PerformanceService } from './performance.service';
 import { RolesGuard } from './guards/roles.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { PerformanceController } from './performance.controller';
+import { EmployeeModule } from '../employee/employee.module';
+import { Employee, EmployeeSchema } from '../employee/schemas/employee.schema';
 
 
 @Module({
@@ -17,6 +19,7 @@ MongooseModule.forFeature([
 { name: 'AppraisalCycle', schema: AppraisalCycleSchema },
 { name: 'Evaluation', schema: EvaluationSchema },
 { name: 'Dispute', schema: DisputeSchema },
+{ name: Employee.name, schema: EmployeeSchema },
 ]),
 ],
 controllers: [PerformanceController],
