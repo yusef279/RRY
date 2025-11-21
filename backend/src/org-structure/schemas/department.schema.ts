@@ -9,7 +9,7 @@ export class Department {
   @Prop({ required: true })
   name: string;
 
-  @Prop()
+  @Prop({ required: true, unique: true })
   code: string;
 
   @Prop()
@@ -17,6 +17,10 @@ export class Department {
 
   @Prop({ default: true })
   active: boolean;
+
+  @Prop({ type: Date, default: null })
+  closedDate: Date | null;
+
 }
 
 export const DepartmentSchema = SchemaFactory.createForClass(Department);

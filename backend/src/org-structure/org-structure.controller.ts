@@ -1,37 +1,84 @@
-import { Controller, Post, Patch, Get, Body, Param } from '@nestjs/common';
+// src/org-structure/org-structure.controller.ts
+
+import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { OrgStructureService } from './org-structure.service';
+import { CreateDepartmentDto } from './dto/create-dep.dto';
+import { UpdateDepartmentDto } from './dto/update-dep.dto';
+import { CreatePositionDto } from './dto/create-pos.dto';
+import { UpdatePositionDto } from './dto/update-pos.dto';
 
 @Controller('org-structure')
 export class OrgStructureController {
-  constructor(private svc: OrgStructureService) {}
+  constructor(private readonly svc: OrgStructureService) {}
 
-  @Post('dept')
-  createDept(@Body() body: any) {
-    return this.svc.createDept(body);
+  // ---------------------
+  // DEPARTMENTS
+  // ---------------------
+  @Post('departments')
+  createDepartment(@Body() dto: CreateDepartmentDto) {
+    return this.svc.createDepartment(dto);
   }
 
-  @Post('pos')
-  createPos(@Body() body: any) {
-    return this.svc.createPos(body);
+  @Get('departments')
+  getDepartments() {
+    return this.svc.getDepartments();
   }
 
-  @Patch('pos/:id/report')
-  changeBoss(@Param('id') id: string, @Body() body: any) {
-    return this.svc.updateReportingLine(id, body.reportsTo);
+  @Get('departments/:id')
+  getDepartment(@Param('id') id: string) {
+    return this.svc.getDepartment(id);
   }
 
-  @Patch('pos/:id/deactivate')
-  deactivate(@Param('id') id: string) {
+  @Patch('departments/:id')
+  updateDepartment(@Param('id') id: string, @Body() dto: UpdateDepartmentDto) {
+    return this.svc.updateDepartment(id, dto);
+  }
+
+  @Patch('departments/:id/deactivate')
+  deactivateDepartment(@Param('id') id: string) {
+    return this.svc.deactivateDepartment(id);
+  }
+
+  // ---------------------
+  // POSITIONS
+  // ---------------------
+  @Post('positions')
+  createPosition(@Body() dto: CreatePositionDto) {
+    return this.svc.createPosition(dto);
+  }
+
+  @Get('positions')
+  getPositions() {
+    return this.svc.getPositions();
+  }
+
+  @Get('positions/:id')
+  getPosition(@Param('id') id: string) {
+    return this.svc.getPosition(id);
+  }
+
+  @Patch('positions/:id')
+  updatePosition(@Param('id') id: string, @Body() dto: UpdatePositionDto) {
+    return this.svc.updatePosition(id, dto);
+  }
+
+  @Patch('positions/:id/deactivate')
+  deactivatePosition(@Param('id') id: string) {
     return this.svc.deactivatePosition(id);
   }
 
-  @Patch('dept/:id')
-  rename(@Param('id') id: string, @Body() body: any) {
-    return this.svc.renameDept(id, body.name);
+  @Patch('positions/:id/mark-filled')
+  markFilled(@Param('id') id: string) {
+    return this.svc.markPositionFilled(id);
   }
 
-  @Get('chart')
-  chart() {
-    return this.svc.getOrgChart();
+  @Patch('positions/:id/mark-vacant')
+  markVacant(@Param('id') id: string) {
+    return this.svc.markPositionVacant(id);
+  }
+
+  @Get('positions-tree')
+  getTree() {
+    return this.svc.getTree();
   }
 }
