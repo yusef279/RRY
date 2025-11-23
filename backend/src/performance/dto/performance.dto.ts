@@ -8,44 +8,6 @@ import {
   AppraisalRatingScaleType,
 } from '../enums/performance.enums';
 
-// -------------------------
-// Template DTOs
-// -------------------------
-export class CreateTemplateDto {
-  @IsString()
-  @IsNotEmpty()
-  name: string;
-
-  @IsString()
-  @IsOptional()
-  description?: string;
-
-  @IsEnum(AppraisalTemplateType)
-  templateType: AppraisalTemplateType;
-
-  @IsNotEmpty()
-  ratingScale: RatingScaleDefinitionDto;
-
-  @IsArray()
-  @IsOptional()
-  criteria?: EvaluationCriterionDto[];
-
-  @IsString()
-  @IsOptional()
-  instructions?: string;
-
-  @IsArray()
-  @IsMongoId({ each: true })
-  applicableDepartmentIds: Types.ObjectId[];
-
-  @IsArray()
-  @IsMongoId({ each: true })
-  applicablePositionIds: Types.ObjectId[];
-
-  @IsOptional()
-  isActive?: boolean;
-}
-
 export class RatingScaleDefinitionDto {
   @IsEnum(AppraisalRatingScaleType)
   type: AppraisalRatingScaleType;
@@ -89,6 +51,44 @@ export class EvaluationCriterionDto {
   @IsOptional()
   required?: boolean;
 }
+
+// -------------------------
+// Template DTOs
+// -------------------------
+export class CreateTemplateDto {
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @IsEnum(AppraisalTemplateType)
+  templateType: AppraisalTemplateType;
+
+  @IsNotEmpty()
+  ratingScale: RatingScaleDefinitionDto;
+
+  @IsArray()
+  @IsOptional()
+  criteria?: EvaluationCriterionDto[];
+
+  @IsString()
+  @IsOptional()
+  instructions?: string;
+
+  @IsArray()
+  @IsMongoId({ each: true })
+  applicableDepartmentIds: Types.ObjectId[];
+
+  @IsArray()
+  @IsMongoId({ each: true })
+  applicablePositionIds: Types.ObjectId[];
+
+  @IsOptional()
+  isActive?: boolean;
+}  
 
 // -------------------------
 // Cycle DTOs
