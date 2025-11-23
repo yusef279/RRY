@@ -1,23 +1,25 @@
-import {
-  Controller,
-  Post,
-  Get,
-  Body,
-  Param,
-  Patch,
-  Query,
-  BadRequestException,
-} from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, Patch, Query } from '@nestjs/common';
 import { PerformanceService } from './performance.service';
-import { Types } from 'mongoose';
+import {
+  CreateTemplateDto,
+  CreateCycleDto,
+  BulkAssignDto,
+  SubmitRecordDto,
+  PublishRecordDto,
+  AcknowledgeRecordDto,
+  RaiseDisputeDto,
+  ResolveDisputeDto
+} from './dto/performance.dto';
 
 @Controller('performance')
 export class PerformanceController {
   constructor(private readonly service: PerformanceService) {}
 
-  // ===== TEMPLATES =====
+  // -------------------------
+  // Templates
+  // -------------------------
   @Post('templates')
-  createTemplate(@Body() dto: any) {
+  createTemplate(@Body() dto: CreateTemplateDto) {
     return this.service.createTemplate(dto);
   }
 
@@ -28,78 +30,74 @@ export class PerformanceController {
 
   @Get('templates/:id')
   getTemplate(@Param('id') id: string) {
-    if (!Types.ObjectId.isValid(id)) throw new BadRequestException('Invalid ID');
     return this.service.getTemplateById(id);
   }
 
-  // ===== CYCLES =====
+  // -------------------------
+  // Cycles
+  // -------------------------
   @Post('cycles')
-  createCycle(@Body() dto: any) {
+  createCycle(@Body() dto: CreateCycleDto) {
     return this.service.createCycle(dto);
   }
 
   @Patch('cycles/:id/activate')
   activateCycle(@Param('id') id: string) {
-    if (!Types.ObjectId.isValid(id)) throw new BadRequestException('Invalid ID');
     return this.service.activateCycle(id);
   }
 
   @Get('cycles')
-  listCycles(@Query() q: any) {
-    return this.service.listCycles(q);
+  listCycles(@Query() query: any) {
+    return this.service.listCycles(query);
   }
 
-  // ===== ASSIGNMENTS =====
+  // -------------------------
+  // Assignments
+  // -------------------------
   @Post('assignments/bulk')
-  bulkAssign(@Body() dto: any[]) {
-    if (!Array.isArray(dto)) throw new BadRequestException('Body must be an array');
-    return this.service.bulkAssign(dto);
+  bulkAssign(@Body() dto: BulkAssignDto) {
+    return this.service.bulkAssign(dto.assignments);
   }
 
   @Get('assignments/manager/:id')
   getAssignmentsForManager(@Param('id') id: string) {
-    if (!Types.ObjectId.isValid(id)) throw new BadRequestException('Invalid ID');
     return this.service.getAssignmentsForManager(id);
   }
 
-  // ===== RECORDS =====
+  // -------------------------
+  // Records
+  // -------------------------
   @Post('records')
-  submitRecord(@Body() dto: any) {
+  submitRecord(@Body() dto: SubmitRecordDto) {
     return this.service.submitRecord(dto);
   }
 
   @Patch('records/:id/publish')
-  publishRecord(@Param('id') id: string, @Body() body: { hrPublishedById: string }) {
-    if (!Types.ObjectId.isValid(id)) throw new BadRequestException('Invalid record ID');
-    if (!Types.ObjectId.isValid(body.hrPublishedById))
-      throw new BadRequestException('Invalid HR employee ID');
+  publishRecord(@Param('id') id: string, @Body() body: PublishRecordDto) {
     return this.service.publishRecord(id, body.hrPublishedById);
   }
 
   @Patch('records/:id/acknowledge')
-  acknowledge(
-    @Param('id') id: string,
-    @Body() body: { employeeId: string; comment?: string },
-  ) {
-    if (!Types.ObjectId.isValid(id)) throw new BadRequestException('Invalid record ID');
-    if (!Types.ObjectId.isValid(body.employeeId))
-      throw new BadRequestException('Invalid employee ID');
+  acknowledge(@Param('id') id: string, @Body() body: AcknowledgeRecordDto) {
     return this.service.acknowledgeRecord(id, body.employeeId, body.comment);
   }
 
-  // ===== DISPUTES =====
+  // -------------------------
+  // Disputes
+  // -------------------------
   @Post('disputes')
-  raiseDispute(@Body() dto: any) {
+  raiseDispute(@Body() dto: RaiseDisputeDto) {
     return this.service.raiseDispute(dto);
   }
 
   @Patch('disputes/:id/resolve')
-  resolveDispute(@Param('id') id: string, @Body() body: any) {
-    if (!Types.ObjectId.isValid(id)) throw new BadRequestException('Invalid dispute ID');
+  resolveDispute(@Param('id') id: string, @Body() body: ResolveDisputeDto) {
     return this.service.resolveDispute(id, body);
   }
 
-  // ===== DASHBOARD =====
+  // -------------------------
+  // Dashboard
+  // -------------------------
   @Get('dashboard/stats')
   stats() {
     return this.service.dashboardStats();

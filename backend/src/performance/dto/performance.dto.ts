@@ -5,7 +5,7 @@ import {
   AppraisalTemplateType,
   AppraisalAssignmentStatus,
   AppraisalDisputeStatus,
-  AppraisalRatingScaleType
+  AppraisalRatingScaleType,
 } from '../enums/performance.enums';
 
 // -------------------------
@@ -148,8 +148,9 @@ export class CreateAssignmentDto {
   @IsMongoId()
   employeeProfileId: Types.ObjectId;
 
+  @IsOptional()
   @IsMongoId()
-  managerProfileId: Types.ObjectId;
+  managerProfileId?: Types.ObjectId; // optional to fix TS errors
 
   @IsMongoId()
   departmentId: Types.ObjectId;
