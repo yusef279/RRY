@@ -1,159 +1,162 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-
-import { AppraisalTemplateDocument } from './models/appraisal-template.schema';
-import { AppraisalCycleDocument } from './models/appraisal-cycle.schema';
-import { AppraisalAssignmentDocument } from './models/appraisal-assignment.schema';
-import { AppraisalRecordDocument } from './models/appraisal-record.schema';
-import { AppraisalDisputeDocument } from './models/appraisal-dispute.schema';
-
-// At the top of your service file
-import { AppraisalCycleStatus,AppraisalRecordStatus,AppraisalAssignmentStatus } from './enums/performance.enums'; // adjust the path to where your enum is
-
+import {
+  CreateTemplateDto,
+  CreateCycleDto,
+  CreateAssignmentDto,
+  SubmitRecordDto
+} from './dto/performance.dto';
+import { AppraisalTemplate, AppraisalTemplateDocument } from './models/appraisal-template.schema';
+import { AppraisalCycle, AppraisalCycleDocument } from './models/appraisal-cycle.schema';
+import { AppraisalAssignment, AppraisalAssignmentDocument } from './models/appraisal-assignment.schema';
+import { AppraisalRecord, AppraisalRecordDocument } from './models/appraisal-record.schema';
+import { AppraisalDispute, AppraisalDisputeDocument } from './models/appraisal-dispute.schema';
+import { EmployeeProfile, EmployeeProfileDocument } from '../employee-profile/models/employee-profile.schema';
+import { AppraisalCycleStatus, AppraisalAssignmentStatus, AppraisalRecordStatus, AppraisalDisputeStatus } from './enums/performance.enums';
 
 @Injectable()
 export class PerformanceService {
   constructor(
-    @InjectModel('AppraisalTemplate') private templateModel: Model<AppraisalTemplateDocument>,
-    @InjectModel('AppraisalCycle') private cycleModel: Model<AppraisalCycleDocument>,
-    @InjectModel('AppraisalAssignment') private assignmentModel: Model<AppraisalAssignmentDocument>,
-    @InjectModel('AppraisalRecord') private recordModel: Model<AppraisalRecordDocument>,
-    @InjectModel('AppraisalDispute') private disputeModel: Model<AppraisalDisputeDocument>,
+    @InjectModel(AppraisalTemplate.name) private templateModel: Model<AppraisalTemplateDocument>,
+    @InjectModel(AppraisalCycle.name) private cycleModel: Model<AppraisalCycleDocument>,
+    @InjectModel(AppraisalAssignment.name) private assignmentModel: Model<AppraisalAssignmentDocument>,
+    @InjectModel(AppraisalRecord.name) private recordModel: Model<AppraisalRecordDocument>,
+    @InjectModel(AppraisalDispute.name) private disputeModel: Model<AppraisalDisputeDocument>,
+    @InjectModel(EmployeeProfile.name) private employeeModel: Model<EmployeeProfileDocument>,
   ) {}
 
+  // -------------------------
   // Templates
-  async createTemplate(createDto: any) {
-    const exists = await this.templateModel.findOne({ name: createDto.name }).lean();
-    if (exists) throw new BadRequestException('Template with that name already exists');
-    const created = await this.templateModel.create(createDto);
-    return created;
+  // -------------------------
+  async createTemplate(dto: CreateTemplateDto) {
+    const template = new this.templateModel(dto);
+    return template.save();
   }
 
-  async listTemplates(query = {}) {
-    return this.templateModel.find(query).lean();
+  async listTemplates(query: any) {
+    return this.templateModel.find(query).exec();
   }
 
   async getTemplateById(id: string) {
-    const doc = await this.templateModel.findById(id).lean();
-    if (!doc) throw new NotFoundException('Template not found');
-    return doc;
+    return this.templateModel.findById(id).exec();
   }
 
+  // -------------------------
   // Cycles
-  async createCycle(dto: any) {
-    const created = await this.cycleModel.create(dto);
-    return created;
+  // -------------------------
+  async createCycle(dto: CreateCycleDto) {
+    const cycle = new this.cycleModel({ ...dto, status: AppraisalCycleStatus.PLANNED });
+    return cycle.save();
   }
 
-async activateCycle(cycleId: string) {
-  const cycle = await this.cycleModel.findById(cycleId);
-  if (!cycle) throw new NotFoundException('Cycle not found');
-
-  cycle.status = AppraisalCycleStatus.ACTIVE; // ✅ use enum
-  cycle.publishedAt = new Date();
-  await cycle.save();
-
-  // assignment generation (bulk) could be added here via templateAssignments
-  return cycle;
-}
-
-  async listCycles(query = {}) {
-    return this.cycleModel.find(query).lean();
+  async activateCycle(id: string) {
+    const cycle = await this.cycleModel.findById(id);
+    if (!cycle) throw new NotFoundException('Cycle not found');
+    cycle.status = AppraisalCycleStatus.ACTIVE;
+    return cycle.save();
   }
 
+  async listCycles(query: any) {
+    return this.cycleModel.find(query).exec();
+  }
+
+  // -------------------------
   // Assignments
-  async bulkAssign(assignments: any[]) {
-    if (!Array.isArray(assignments) || assignments.length === 0) return [];
-    const docs = assignments.map(a => ({
-      ...a,
-      assignedAt: a.assignedAt ? new Date(a.assignedAt) : new Date(),
-      status: a.status || 'NOT_STARTED',
-    }));
-    const created = await this.assignmentModel.insertMany(docs);
-    return created;
+  // -------------------------
+  async bulkAssign(assignments: CreateAssignmentDto[]) {
+    if (!assignments || assignments.length === 0) {
+      throw new BadRequestException('No assignments provided');
+    }
+
+    const preparedAssignments: Partial<CreateAssignmentDto>[] = [];
+
+    for (const dto of assignments) {
+      const emp = await this.employeeModel.findById(dto.employeeProfileId);
+      if (!emp) continue;
+
+      preparedAssignments.push({
+        cycleId: dto.cycleId,
+        templateId: dto.templateId,
+        employeeProfileId: emp._id,
+        managerProfileId: dto.managerProfileId || emp.supervisorPositionId as Types.ObjectId,
+        departmentId: emp.primaryDepartmentId as Types.ObjectId,
+        positionId: dto.positionId || emp.primaryPositionId as Types.ObjectId,
+        status: dto.status || AppraisalAssignmentStatus.NOT_STARTED,
+        dueDate: dto.dueDate,
+      });
+    }
+
+    return this.assignmentModel.insertMany(preparedAssignments);
   }
 
   async getAssignmentsForManager(managerId: string) {
-    return this.assignmentModel.find({ managerProfileId: managerId }).lean();
+    return this.assignmentModel.find({ managerProfileId: managerId }).exec();
   }
 
+  // -------------------------
   // Records
-  async submitRecord(dto: any) {
-    // dto must contain assignmentId, cycleId, templateId, employeeProfileId, managerProfileId, ratings
-    const rec = await this.recordModel.create({
-      ...dto,
-      status: 'MANAGER_SUBMITTED',
-      managerSubmittedAt: new Date(),
-    });
-
-    // update assignment
-    await this.assignmentModel.findByIdAndUpdate(dto.assignmentId, {
-      status: 'SUBMITTED',
-      submittedAt: new Date(),
-      latestAppraisalId: rec._id,
-    });
-
-    return rec;
+  // -------------------------
+  async submitRecord(dto: SubmitRecordDto) {
+    const record = new this.recordModel(dto);
+    record.status = AppraisalRecordStatus.MANAGER_SUBMITTED;
+    return record.save();
   }
 
-async publishRecord(recordId: string, hrPublishedById?: string) {
-  const rec = await this.recordModel.findById(recordId);
-  if (!rec) throw new NotFoundException('Appraisal record not found');
+  async publishRecord(id: string, hrPublishedById?: Types.ObjectId) {
+    const record = await this.recordModel.findById(id);
+    if (!record) throw new NotFoundException('Record not found');
 
-  rec.status = AppraisalRecordStatus.HR_PUBLISHED; // ✅ use enum
-  rec.hrPublishedAt = new Date();
-  if (hrPublishedById) rec.publishedByEmployeeId = new Types.ObjectId(hrPublishedById);
-  await rec.save();
-
-  // update assignment
-  await this.assignmentModel.findByIdAndUpdate(rec.assignmentId, {
-    status: AppraisalAssignmentStatus.PUBLISHED, // ✅ use enum
-    publishedAt: new Date(),
-  });
-
-  return rec;
-}
-
-  async acknowledgeRecord(recordId: string, employeeId: string, comment?: string) {
-    const rec = await this.recordModel.findById(recordId);
-    if (!rec) throw new NotFoundException('Record not found');
-    rec.employeeViewedAt = new Date();
-    rec.employeeAcknowledgedAt = new Date();
-    rec.employeeAcknowledgementComment = comment;
-    await rec.save();
-
-    await this.assignmentModel.findOneAndUpdate({ _id: rec.assignmentId }, { status: 'ACKNOWLEDGED' });
-    return rec;
+    record.status = AppraisalRecordStatus.HR_PUBLISHED;
+    record.hrPublishedAt = new Date();
+    record.publishedByEmployeeId = hrPublishedById;
+    return record.save();
   }
 
+  async acknowledgeRecord(id: string, employeeId: Types.ObjectId, comment?: string) {
+    const record = await this.recordModel.findById(id);
+    if (!record) throw new NotFoundException('Record not found');
+
+    record.employeeAcknowledgedAt = new Date();
+    record.employeeAcknowledgementComment = comment;
+    return record.save();
+  }
+
+  // -------------------------
   // Disputes
+  // -------------------------
   async raiseDispute(dto: any) {
-    const dispute = await this.disputeModel.create({
-      ...dto,
-      submittedAt: new Date(),
-      status: 'OPEN',
-    });
-    // optionally notify HR
-    return dispute;
+    const dispute = new this.disputeModel(dto);
+    dispute.status = AppraisalDisputeStatus.OPEN;
+    dispute.submittedAt = new Date();
+    return dispute.save();
   }
 
-  async resolveDispute(disputeId: string, payload: { status: string; resolutionSummary?: string; resolvedBy?: string }) {
-    const d = await this.disputeModel.findById(disputeId);
-    if (!d) throw new NotFoundException('Dispute not found');
-    d.status = payload.status as any;
-    d.resolutionSummary = payload.resolutionSummary;
-    d.resolvedAt = new Date();
-    if (payload.resolvedBy) d.resolvedByEmployeeId = new Types.ObjectId(payload.resolvedBy);
-    await d.save();
-    return d;
+  async resolveDispute(id: string, dto: any) {
+    const dispute = await this.disputeModel.findById(id);
+    if (!dispute) throw new NotFoundException('Dispute not found');
+
+    dispute.status = dto.status;
+    dispute.resolutionSummary = dto.resolutionSummary;
+    dispute.resolvedAt = new Date();
+    dispute.resolvedByEmployeeId = dto.resolvedBy;
+    return dispute.save();
   }
 
-  // Reporting / Dashboard
+  // -------------------------
+  // Dashboard
+  // -------------------------
   async dashboardStats() {
     const totalCycles = await this.cycleModel.countDocuments();
-    const activeAssignments = await this.assignmentModel.countDocuments({ status: 'IN_PROGRESS' });
-    const submitted = await this.recordModel.countDocuments({ status: 'MANAGER_SUBMITTED' });
-    return { totalCycles, activeAssignments, submitted };
+    const activeCycles = await this.cycleModel.countDocuments({ status: AppraisalCycleStatus.ACTIVE });
+    const totalAssignments = await this.assignmentModel.countDocuments();
+    const submittedRecords = await this.recordModel.countDocuments({ status: AppraisalRecordStatus.MANAGER_SUBMITTED });
+
+    return {
+      totalCycles,
+      activeCycles,
+      totalAssignments,
+      submittedRecords
+    };
   }
 }
