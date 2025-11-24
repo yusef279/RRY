@@ -4,7 +4,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { model, Types } from 'mongoose';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
 
 import {
   Department,
@@ -62,17 +63,25 @@ export interface OrgTreePositionNode {
 
 @Injectable()
 export class OrganizationStructureService {
-  private readonly departmentModel = model<DepartmentDocument>(Department.name);
-  private readonly positionModel = model<PositionDocument>(Position.name);
-  private readonly assignmentModel =
-    model<PositionAssignmentDocument>(PositionAssignment.name);
-  private readonly changeRequestModel =
-    model<StructureChangeRequestDocument>(StructureChangeRequest.name);
-  private readonly approvalModel =
-    model<StructureApprovalDocument>(StructureApproval.name);
-  private readonly changeLogModel =
-    model<StructureChangeLogDocument>(StructureChangeLog.name);
+  constructor(
+    @InjectModel(Department.name)
+    private readonly departmentModel: Model<DepartmentDocument>,
 
+    @InjectModel(Position.name)
+    private readonly positionModel: Model<PositionDocument>,
+
+    @InjectModel(PositionAssignment.name)
+    private readonly assignmentModel: Model<PositionAssignmentDocument>,
+
+    @InjectModel(StructureChangeRequest.name)
+    private readonly changeRequestModel: Model<StructureChangeRequestDocument>,
+
+    @InjectModel(StructureApproval.name)
+    private readonly approvalModel: Model<StructureApprovalDocument>,
+
+    @InjectModel(StructureChangeLog.name)
+    private readonly changeLogModel: Model<StructureChangeLogDocument>,
+  ) {}
   // =============== Departments ===============
 
   async createDepartment(dto: CreateDepartmentDto) {
@@ -460,13 +469,13 @@ export class OrganizationStructureService {
 
   // =============== Helpers ===============
 
-  private async logChange(
-    action: ChangeLogAction,
-    entityType: string,
-    entityId: ObjectId,
-    performedByEmployeeId?: string,
-    beforeSnapshot?: any,  // relaxed type
-    afterSnapshot?: any,   // relaxed type
+private async logChange(
+  action: ChangeLogAction,
+  entityType: string,
+  entityId: ObjectId,
+  performedByEmployeeId?: string,
+  beforeSnapshot?: any, // relaxed type
+  afterSnapshot?: any,  // relaxed type
 ) {
   await this.changeLogModel.create({
     action,
