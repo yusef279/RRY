@@ -8,6 +8,9 @@ import {
   AppraisalRatingScaleType,
 } from '../enums/performance.enums';
 
+// -------------------------
+// Rating / Template DTOs
+// -------------------------
 export class RatingScaleDefinitionDto {
   @IsEnum(AppraisalRatingScaleType)
   type: AppraisalRatingScaleType;
@@ -52,9 +55,6 @@ export class EvaluationCriterionDto {
   required?: boolean;
 }
 
-// -------------------------
-// Template DTOs
-// -------------------------
 export class CreateTemplateDto {
   @IsString()
   @IsNotEmpty()
@@ -88,11 +88,20 @@ export class CreateTemplateDto {
 
   @IsOptional()
   isActive?: boolean;
-}  
+}
 
 // -------------------------
 // Cycle DTOs
 // -------------------------
+export class CycleTemplateAssignmentDto {
+  @IsMongoId()
+  templateId: Types.ObjectId;
+
+  @IsArray()
+  @IsMongoId({ each: true })
+  departmentIds: Types.ObjectId[];
+}
+
 export class CreateCycleDto {
   @IsString()
   @IsNotEmpty()
@@ -121,23 +130,9 @@ export class CreateCycleDto {
   employeeAcknowledgementDueDate?: Date;
 }
 
-export class CycleTemplateAssignmentDto {
-  @IsMongoId()
-  templateId: Types.ObjectId;
-
-  @IsArray()
-  @IsMongoId({ each: true })
-  departmentIds: Types.ObjectId[];
-}
-
 // -------------------------
 // Assignment DTOs
 // -------------------------
-export class BulkAssignDto {
-  @IsArray()
-  assignments: CreateAssignmentDto[];
-}
-
 export class CreateAssignmentDto {
   @IsMongoId()
   cycleId: Types.ObjectId;
@@ -150,7 +145,7 @@ export class CreateAssignmentDto {
 
   @IsOptional()
   @IsMongoId()
-  managerProfileId?: Types.ObjectId; // optional to fix TS errors
+  managerProfileId?: Types.ObjectId;
 
   @IsMongoId()
   departmentId: Types.ObjectId;
@@ -167,29 +162,14 @@ export class CreateAssignmentDto {
   dueDate?: Date;
 }
 
+export class BulkAssignDto {
+  @IsArray()
+  assignments: CreateAssignmentDto[];
+}
+
 // -------------------------
 // Record DTOs
 // -------------------------
-export class SubmitRecordDto {
-  @IsMongoId()
-  assignmentId: Types.ObjectId;
-
-  @IsMongoId()
-  cycleId: Types.ObjectId;
-
-  @IsMongoId()
-  templateId: Types.ObjectId;
-
-  @IsMongoId()
-  employeeProfileId: Types.ObjectId;
-
-  @IsMongoId()
-  managerProfileId: Types.ObjectId;
-
-  @IsArray()
-  ratings: RatingEntryDto[];
-}
-
 export class RatingEntryDto {
   @IsString()
   key: string;
@@ -210,6 +190,26 @@ export class RatingEntryDto {
   comments?: string;
 }
 
+export class SubmitRecordDto {
+  @IsMongoId()
+  assignmentId: Types.ObjectId;
+
+  @IsMongoId()
+  cycleId: Types.ObjectId;
+
+  @IsMongoId()
+  templateId: Types.ObjectId;
+
+  @IsMongoId()
+  employeeProfileId: Types.ObjectId;
+
+  @IsMongoId()
+  managerProfileId: Types.ObjectId;
+
+  @IsArray()
+  ratings: RatingEntryDto[];
+}
+
 export class PublishRecordDto {
   @IsOptional()
   @IsMongoId()
@@ -224,7 +224,6 @@ export class AcknowledgeRecordDto {
   @IsString()
   comment?: string;
 }
-
 // -------------------------
 // Dispute DTOs
 // -------------------------
