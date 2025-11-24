@@ -6,12 +6,15 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
+import { Types } from 'mongoose';
+
 import { OrganizationStructureService } from './organization-structure.service';
+
 import { CreateDepartmentDto } from './DTOs/create-department.dto';
 import { UpdateDepartmentDto } from './DTOs/update-department.dto';
 import { CreatePositionDto } from './DTOs/create-position.dto';
 import { UpdatePositionDto } from './DTOs/update-position.dto';
-import { DeactivatePositionDto } from './DTOs/deactivate-position.dto.tsdeactivate-position.dto';
+import { DeactivatePositionDto } from './DTOs/deactivate-position.dto';
 import { CreateStructureChangeRequestDto } from './DTOs/create-structure-change-request.dto';
 import { ApproveStructureChangeRequestDto } from './DTOs/approve-structure-change-request.dto';
 import { RejectStructureChangeRequestDto } from './DTOs/reject-structure-change-request.dto';
@@ -19,14 +22,14 @@ import { RejectStructureChangeRequestDto } from './DTOs/reject-structure-change-
 @Controller('organization-structure')
 export class OrganizationStructureController {
   constructor(
-    private readonly organizationStructureService: OrganizationStructureService,
+    private readonly service: OrganizationStructureService,
   ) {}
 
-  // -------- Departments --------
+  // ------------------- STRUCTURE CREATION -------------------
 
   @Post('departments')
   createDepartment(@Body() dto: CreateDepartmentDto) {
-    return this.organizationStructureService.createDepartment(dto);
+    return this.service.createDepartment(dto);
   }
 
   @Patch('departments/:id')
@@ -34,14 +37,12 @@ export class OrganizationStructureController {
     @Param('id') id: string,
     @Body() dto: UpdateDepartmentDto,
   ) {
-    return this.organizationStructureService.updateDepartment(id, dto);
+    return this.service.updateDepartment(id, dto);
   }
-
-  // -------- Positions --------
 
   @Post('positions')
   createPosition(@Body() dto: CreatePositionDto) {
-    return this.organizationStructureService.createPosition(dto);
+    return this.service.createPosition(dto);
   }
 
   @Patch('positions/:id')
@@ -49,49 +50,59 @@ export class OrganizationStructureController {
     @Param('id') id: string,
     @Body() dto: UpdatePositionDto,
   ) {
-    return this.organizationStructureService.updatePosition(id, dto);
+    return this.service.updatePosition(id, dto);
   }
+
+  // ------------------- DEACTIVATION -------------------
 
   @Patch('positions/:id/deactivate')
   deactivatePosition(
     @Param('id') id: string,
     @Body() dto: DeactivatePositionDto,
   ) {
-    return this.organizationStructureService.deactivatePosition(id, dto);
+    return this.service.deactivatePosition(id, dto);
   }
 
-  // -------- Org Tree / Visibility --------
+  // ------------------- TREE VIEW -------------------
 
   @Get('tree')
   getOrgTree() {
-    return this.organizationStructureService.getOrgTree();
+    return this.service.getOrgTree();
   }
 
-  // -------- Change Requests & Approvals --------
+  // ------------------- APPROVAL WORKFLOW -------------------
 
   @Post('change-requests')
-  createChangeRequest(@Body() dto: CreateStructureChangeRequestDto) {
-    return this.organizationStructureService.createChangeRequest(dto);
+  createChangeRequest(
+    @Body() dto: CreateStructureChangeRequestDto,
+  ) {
+    return this.service.createChangeRequest(dto);
   }
 
   @Get('change-requests/pending')
-  getPendingChangeRequests() {
-    return this.organizationStructureService.getPendingChangeRequests();
+  getPending() {
+    return this.service.getPendingChangeRequests();
   }
 
-  @Patch('change-requests/:id/approve')
-  approveChangeRequest(
+  @Post('change-requests/:id/approve')
+  approve(
     @Param('id') id: string,
     @Body() dto: ApproveStructureChangeRequestDto,
   ) {
-    return this.organizationStructureService.approveChangeRequest(id, dto);
+    return this.service.approveChangeRequest(
+      new Types.ObjectId(id),
+      dto,
+    );
   }
 
-  @Patch('change-requests/:id/reject')
-  rejectChangeRequest(
+  @Post('change-requests/:id/reject')
+  reject(
     @Param('id') id: string,
     @Body() dto: RejectStructureChangeRequestDto,
   ) {
-    return this.organizationStructureService.rejectChangeRequest(id, dto);
+    return this.service.rejectChangeRequest(
+      new Types.ObjectId(id),
+      dto,
+    );
   }
 }
