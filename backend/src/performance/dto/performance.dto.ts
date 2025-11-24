@@ -1,5 +1,5 @@
 // src/performance/dto/performance.dto.ts
-import { IsString, IsNotEmpty, IsOptional, IsArray, IsEnum, IsMongoId, IsNumber, Min, Max } from 'class-validator';
+import { IsString, IsNotEmpty,ArrayNotEmpty, IsOptional, IsArray, IsEnum, IsMongoId, IsNumber, Min, Max } from 'class-validator';
 import { Types } from 'mongoose';
 import {
   AppraisalTemplateType,
@@ -56,6 +56,14 @@ export class EvaluationCriterionDto {
 }
 
 export class CreateTemplateDto {
+  @IsArray()
+  @ArrayNotEmpty()
+  applicableDepartmentIds: string[];
+
+  @IsArray()
+  @ArrayNotEmpty()
+  applicablePositionIds: string[];
+
   @IsString()
   @IsNotEmpty()
   name: string;
@@ -77,14 +85,6 @@ export class CreateTemplateDto {
   @IsString()
   @IsOptional()
   instructions?: string;
-
-  @IsArray()
-  @IsMongoId({ each: true })
-  applicableDepartmentIds: Types.ObjectId[];
-
-  @IsArray()
-  @IsMongoId({ each: true })
-  applicablePositionIds: Types.ObjectId[];
 
   @IsOptional()
   isActive?: boolean;
