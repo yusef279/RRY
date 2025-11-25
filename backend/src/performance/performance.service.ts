@@ -52,6 +52,12 @@ export class PerformanceService {
       throw new BadRequestException('At least one position must be selected');
     }
 
+    // Name uniqueness
+    if (dto.name) {
+      const existingByName = await this.templateModel.findOne({ name: dto.name });
+      if (existingByName) throw new ConflictException(`Template with name "${dto.name}" already exists`);
+    }
+
     for (const depId of dto.applicableDepartmentIds) {
       const dep = await this.departmentModel.findById(depId);
       if (!dep) throw new BadRequestException(`Department ${depId} does not exist`);
@@ -66,13 +72,13 @@ export class PerformanceService {
     return template.save();
   }
 
- async listTemplates(query: any) {
-  const templates = await this.templateModel.find(query).exec();
-  if (!templates.length) {
-    return { message: 'No templates found' };
+  async listTemplates(query: any) {
+    const templates = await this.templateModel.find(query).exec();
+    if (!templates.length) {
+      return { message: 'No templates found' };
+    }
+    return templates;
   }
-  return templates;
-}
 
   async getTemplateById(id: string) {
     const template = await this.templateModel.findById(id);
@@ -83,6 +89,21 @@ export class PerformanceService {
   async updateTemplate(id: string, updates: Partial<CreateTemplateDto>) {
     const template = await this.templateModel.findById(id);
     if (!template) throw new NotFoundException('Template not found');
+
+    // Prevent editing name to a duplicate
+    if (updates.name) {
+      const other = await this.templateModel.findOne({ name: updates.name, _id: { $ne: id } });
+      if (other) throw new ConflictException(`Template name "${updates.name}" already in use`);
+    }
+
+    // Prevent updating a template that is used by an active cycle
+    const usedInActiveCycle = await this.cycleModel.findOne({
+      'templateAssignments.templateId': id,
+      status: AppraisalCycleStatus.ACTIVE
+    });
+    if (usedInActiveCycle) {
+      throw new ConflictException('Cannot modify template while it is used in an active cycle');
+    }
 
     if (updates.applicableDepartmentIds) {
       for (const depId of updates.applicableDepartmentIds) {
@@ -106,6 +127,16 @@ export class PerformanceService {
     const template = await this.templateModel.findById(id);
     if (!template) throw new NotFoundException('Template not found');
     if (!template.isActive) throw new ConflictException('Template already deactivated');
+
+    // Prevent deactivation if used in active cycles
+    const usedInActiveCycle = await this.cycleModel.findOne({
+      'templateAssignments.templateId': id,
+      status: AppraisalCycleStatus.ACTIVE
+    });
+    if (usedInActiveCycle) {
+      throw new ConflictException('Cannot deactivate template while it is used in an active cycle');
+    }
+
     template.isActive = false;
     return template.save();
   }
@@ -114,13 +145,47 @@ export class PerformanceService {
   // Cycles (REQ-PP-02)
   // =============================
   async createCycle(dto: CreateCycleDto) {
+    // Validate template assignments and departments
     for (const assignment of dto.templateAssignments) {
       const template = await this.templateModel.findById(assignment.templateId);
       if (!template) throw new BadRequestException(`Template ${assignment.templateId} not found`);
 
+      if (!assignment.departmentIds?.length) {
+        throw new BadRequestException('Each template assignment must include at least one departmentId');
+      }
+
       for (const depId of assignment.departmentIds) {
         const dep = await this.departmentModel.findById(depId);
         if (!dep) throw new BadRequestException(`Department ${depId} not found`);
+      }
+    }
+
+    // Validate cycle dates
+    if (dto.startDate && dto.endDate) {
+      const start = new Date(dto.startDate);
+      const end = new Date(dto.endDate);
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        throw new BadRequestException('Invalid startDate or endDate');
+      }
+      if (start >= end) throw new BadRequestException('cycle startDate must be before endDate');
+    }
+
+    // Prevent overlapping cycles for same departments (simple check)
+    for (const ta of dto.templateAssignments) {
+      for (const depId of ta.departmentIds) {
+        const overlapping = await this.cycleModel.findOne({
+          'templateAssignments.departmentIds': depId,
+          $or: [
+            {
+              startDate: { $lte: new Date(dto.endDate) },
+              endDate: { $gte: new Date(dto.startDate) }
+            },
+            { status: AppraisalCycleStatus.ACTIVE }
+          ]
+        });
+        if (overlapping) {
+          throw new ConflictException(`Overlapping cycle found for department ${depId}`);
+        }
       }
     }
 
@@ -132,6 +197,12 @@ export class PerformanceService {
     const cycle = await this.cycleModel.findById(id);
     if (!cycle) throw new NotFoundException('Cycle not found');
     if (cycle.status !== AppraisalCycleStatus.PLANNED) throw new ConflictException('Only planned cycles can be activated');
+
+    // Optional: ensure cycle has templateAssignments or assignments exist
+    if (!cycle.templateAssignments || !cycle.templateAssignments.length) {
+      throw new BadRequestException('Cycle has no template assignments configured');
+    }
+
     cycle.status = AppraisalCycleStatus.ACTIVE;
     return cycle.save();
   }
@@ -158,90 +229,119 @@ export class PerformanceService {
   // =============================
   // Assignments (REQ-PP-05, REQ-PP-13)
   // =============================
-async bulkAssign(dto: BulkAssignDto) {
-  if (!dto.assignments?.length) throw new BadRequestException('No assignments provided');
+  async bulkAssign(dto: BulkAssignDto) {
+    if (!dto.assignments?.length) throw new BadRequestException('No assignments provided');
 
-  const prepared: Partial<CreateAssignmentDto>[] = [];
-  for (const assignment of dto.assignments) {
-    const employee = await this.employeeModel.findById(assignment.employeeProfileId);
-    if (!employee) throw new BadRequestException(`Employee ${assignment.employeeProfileId} not found`);
+    const prepared: Partial<CreateAssignmentDto>[] = [];
+    for (const assignment of dto.assignments) {
+      // Validate cycle exists
+      const cycle = await this.cycleModel.findById(assignment.cycleId);
+      if (!cycle) throw new BadRequestException(`Cycle ${assignment.cycleId} not found`);
 
-    const department = await this.departmentModel.findById(assignment.departmentId);
-    if (!department) throw new BadRequestException(`Department ${assignment.departmentId} not found`);
+      const employee = await this.employeeModel.findById(assignment.employeeProfileId);
+      if (!employee) throw new BadRequestException(`Employee ${assignment.employeeProfileId} not found`);
 
-    if (assignment.managerProfileId) {
-      const manager = await this.employeeModel.findById(assignment.managerProfileId);
-      if (!manager) throw new BadRequestException(`Manager ${assignment.managerProfileId} not found`);
+      const department = await this.departmentModel.findById(assignment.departmentId);
+      if (!department) throw new BadRequestException(`Department ${assignment.departmentId} not found`);
+
+      if (assignment.managerProfileId) {
+        const manager = await this.employeeModel.findById(assignment.managerProfileId);
+        if (!manager) throw new BadRequestException(`Manager ${assignment.managerProfileId} not found`);
+      }
+
+      if (assignment.positionId) {
+        const position = await this.positionModel.findById(assignment.positionId);
+        if (!position) throw new BadRequestException(`Position ${assignment.positionId} not found`);
+      }
+
+      // Ensure employee is actually in this department (if your schema has department info)
+      if ((employee as any).departmentId && (employee as any).departmentId.toString() !== assignment.departmentId.toString()) {
+        // Depending on business rules, you might allow assignment to other departments. For safety, block it here.
+        throw new ConflictException(`Employee ${assignment.employeeProfileId} does not belong to department ${assignment.departmentId}`);
+      }
+
+      // Validate template exists and is applicable to department/position
+      const template = await this.templateModel.findById(assignment.templateId);
+      if (!template) throw new BadRequestException(`Template ${assignment.templateId} not found`);
+
+      // Template applicability checks (if template defines applicableDepartmentIds/applicablePositionIds)
+      if (Array.isArray((template as any).applicableDepartmentIds) && (template as any).applicableDepartmentIds.length) {
+        if (!(template as any).applicableDepartmentIds.map((d: any) => d.toString()).includes(assignment.departmentId.toString())) {
+          throw new ConflictException(`Template ${assignment.templateId} is not applicable to department ${assignment.departmentId}`);
+        }
+      }
+
+      if (Array.isArray((template as any).applicablePositionIds) && (template as any).applicablePositionIds.length && assignment.positionId) {
+        if (!(template as any).applicablePositionIds.map((p: any) => p.toString()).includes(assignment.positionId.toString())) {
+          throw new ConflictException(`Template ${assignment.templateId} is not applicable to position ${assignment.positionId}`);
+        }
+      }
+
+      // Logical check: Prevent duplicate assignment
+      const existing = await this.assignmentModel.findOne({
+        employeeProfileId: assignment.employeeProfileId,
+        cycleId: assignment.cycleId,
+        templateId: assignment.templateId
+      });
+      if (existing) throw new ConflictException('Assignment already exists for this employee in this cycle');
+
+      prepared.push({
+        ...assignment,
+        status: assignment.status || AppraisalAssignmentStatus.NOT_STARTED
+      });
     }
 
-    if (assignment.positionId) {
-      const position = await this.positionModel.findById(assignment.positionId);
-      if (!position) throw new BadRequestException(`Position ${assignment.positionId} not found`);
+    return this.assignmentModel.insertMany(prepared);
+  }
+
+  async getAssignmentsForManager(managerId: string) {
+    const manager = await this.employeeModel.findById(managerId);
+    if (!manager) throw new NotFoundException(`Manager ${managerId} not found`);
+
+    const assignments = await this.assignmentModel
+      .find({ managerProfileId: managerId })
+      .populate('cycleId templateId employeeProfileId departmentId positionId')
+      .exec();
+
+    if (!assignments.length) {
+      // return empty array for UX instead of throwing for missing assignments
+      return [];
     }
 
-    // Logical check: Prevent duplicate assignment
-    const existing = await this.assignmentModel.findOne({
-      employeeProfileId: assignment.employeeProfileId,
-      cycleId: assignment.cycleId,
-      templateId: assignment.templateId
-    });
-    if (existing) throw new ConflictException('Assignment already exists for this employee in this cycle');
-
-    prepared.push({
-      ...assignment,
-      status: assignment.status || AppraisalAssignmentStatus.NOT_STARTED
-    });
+    return assignments;
   }
 
-  return this.assignmentModel.insertMany(prepared);
-}
+  async getAssignmentsForEmployee(employeeId: string) {
+    const employee = await this.employeeModel.findById(employeeId);
+    if (!employee) throw new NotFoundException(`Employee ${employeeId} not found`);
 
-async getAssignmentsForManager(managerId: string) {
-  const manager = await this.employeeModel.findById(managerId);
-  if (!manager) throw new NotFoundException(`Manager ${managerId} not found`);
+    const assignments = await this.assignmentModel
+      .find({ employeeProfileId: employeeId })
+      .populate('cycleId templateId managerProfileId departmentId positionId')
+      .exec();
 
-  const assignments = await this.assignmentModel
-    .find({ managerProfileId: managerId })
-    .populate('cycleId templateId employeeProfileId departmentId positionId')
-    .exec();
+    if (!assignments.length) {
+      return [];
+    }
 
-  if (!assignments.length) {
-    throw new NotFoundException(`No assignments found for manager ${managerId}`);
+    return assignments;
   }
 
-  return assignments;
-}
+  async getAssignmentById(id: string) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException(`Invalid assignment ID: ${id}`);
+    }
 
-async getAssignmentsForEmployee(employeeId: string) {
-  const employee = await this.employeeModel.findById(employeeId);
-  if (!employee) throw new NotFoundException(`Employee ${employeeId} not found`);
+    const assignment = await this.assignmentModel
+      .findById(id)
+      .populate('cycleId templateId employeeProfileId managerProfileId departmentId positionId')
+      .exec();
 
-  const assignments = await this.assignmentModel
-    .find({ employeeProfileId: employeeId })
-    .populate('cycleId templateId managerProfileId departmentId positionId')
-    .exec();
+    if (!assignment) throw new NotFoundException(`Assignment with id ${id} not found`);
 
-  if (!assignments.length) {
-    throw new NotFoundException(`No assignments found for employee ${employeeId}`);
+    return assignment;
   }
 
-  return assignments;
-}
-
-async getAssignmentById(id: string) {
-  if (!Types.ObjectId.isValid(id)) {
-    throw new BadRequestException(`Invalid assignment ID: ${id}`);
-  }
-
-  const assignment = await this.assignmentModel
-    .findById(id)
-    .populate('cycleId templateId employeeProfileId managerProfileId departmentId positionId')
-    .exec();
-
-  if (!assignment) throw new NotFoundException(`Assignment with id ${id} not found`);
-
-  return assignment;
-}
   // =============================
   // Records (REQ-AE-03, REQ-AE-04)
   // =============================
@@ -252,9 +352,40 @@ async getAssignmentById(id: string) {
       throw new ConflictException('Cannot submit record for an assignment not in progress');
     }
 
+    // Validate ratings presence & template constraints
+    if (!dto.ratings || !dto.ratings.length) {
+      throw new BadRequestException('Ratings must be provided for submission');
+    }
+
+    // If assignment has templateId, validate rating items against template rating definitions if possible
+    let template: any = null;
+    if (assignment.templateId) {
+      template = await this.templateModel.findById(assignment.templateId);
+    }
+
+    // If the template contains a ratingScale definition, attempt to validate rating values
+    // (This assumes your template has something like ratingScale.min and ratingScale.max or scale items)
+    const ratingScale = template?.ratingScale;
     let totalScore = 0;
+
     for (const rating of dto.ratings) {
-      totalScore += rating.weightedScore || rating.ratingValue;
+      if (rating.ratingValue == null && rating.weightedScore == null) {
+        throw new BadRequestException('Each rating must contain a ratingValue or weightedScore');
+      }
+
+      const value = rating.weightedScore ?? rating.ratingValue;
+      if (ratingScale) {
+        const min = ratingScale.min ?? null;
+        const max = ratingScale.max ?? null;
+        if (min != null && value < min) {
+          throw new BadRequestException(`Rating value ${value} is below allowed minimum ${min}`);
+        }
+        if (max != null && value > max) {
+          throw new BadRequestException(`Rating value ${value} is above allowed maximum ${max}`);
+        }
+      }
+
+      totalScore += value;
     }
 
     const record = new this.recordModel({
@@ -279,6 +410,24 @@ async getAssignmentById(id: string) {
     if (!record) throw new NotFoundException('Record not found');
     if (record.status !== AppraisalRecordStatus.MANAGER_SUBMITTED) {
       throw new ConflictException('Only manager-submitted records can be published');
+    }
+
+    // Prevent double publish
+    if (record.hrPublishedAt) {
+      throw new ConflictException('Record already published by HR');
+    }
+
+    // Check cycle status - cannot publish if cycle is closed
+    const cycle = await this.cycleModel.findById(record.cycleId);
+    if (cycle && cycle.status === AppraisalCycleStatus.CLOSED) {
+      throw new ConflictException('Cannot publish record for a closed cycle');
+    }
+
+    // Validate HR publisher exists (role check should be enforced via auth layer)
+    if (hrPublishedById) {
+      const hrUser = await this.employeeModel.findById(hrPublishedById);
+      if (!hrUser) throw new BadRequestException('hrPublishedById is not a valid employee');
+      // OPTIONAL: enforce role: if (!hrUser.roles.includes('HR')) throw new BadRequestException('User is not authorized as HR');
     }
 
     record.status = AppraisalRecordStatus.HR_PUBLISHED;
@@ -321,6 +470,15 @@ async getAssignmentById(id: string) {
       throw new BadRequestException('Employee cannot acknowledge another employee\'s record');
     }
 
+    // Prevent acknowledgement when there is an active dispute
+    const activeDispute = await this.disputeModel.findOne({
+      appraisalId: record._id,
+      status: { $in: [AppraisalDisputeStatus.OPEN, AppraisalDisputeStatus.UNDER_REVIEW] }
+    });
+    if (activeDispute) {
+      throw new ConflictException('Cannot acknowledge record while an active dispute exists');
+    }
+
     record.employeeAcknowledgedAt = new Date();
     record.employeeAcknowledgementComment = comment;
 
@@ -358,6 +516,11 @@ async getAssignmentById(id: string) {
       throw new BadRequestException('Cannot dispute unpublished record');
     }
 
+    // Prevent disputing after acknowledgement
+    if (record.employeeAcknowledgedAt) {
+      throw new ConflictException('Cannot raise dispute after employee has acknowledged the record');
+    }
+
     const daysSincePublish = Math.floor(
       (Date.now() - record.hrPublishedAt.getTime()) / (1000 * 60 * 60 * 24)
     );
@@ -373,6 +536,11 @@ async getAssignmentById(id: string) {
 
     if (existingDispute) {
       throw new ConflictException('An active dispute already exists for this appraisal');
+    }
+
+    // Validate dispute reason
+    if (!dto.reason || !dto.reason.trim()) {
+      throw new BadRequestException('Dispute reason is required');
     }
 
     const dispute = new this.disputeModel({
@@ -396,6 +564,7 @@ async getAssignmentById(id: string) {
     dispute.resolvedByEmployeeId = dto.resolvedBy;
     dispute.resolvedAt = new Date();
 
+    // If dispute resolution changes the record rating/score, caller should update the underlying record separately.
     return dispute.save();
   }
 
