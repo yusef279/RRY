@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
+import { APP_GUARD } from '@nestjs/core';
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -13,6 +14,8 @@ import { OrganizationStructureModule } from './organization-structure/organizati
 import { PerformanceModule } from './performance/performance.module';
 import { PayrollConfigurationModule } from './payroll-configuration/payroll-configuration.module';
 import { PayrollExecutionModule } from './payroll-execution/payroll-execution.module';
+
+import { RolesGuard } from './authorization/guards/roles.guard';
 
 @Module({
   imports: [
@@ -41,6 +44,13 @@ import { PayrollExecutionModule } from './payroll-execution/payroll-execution.mo
     PerformanceModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    // Apply RolesGuard globally (authorization only)
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
+    },
+  ],
 })
 export class AppModule {}

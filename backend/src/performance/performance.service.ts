@@ -1,5 +1,13 @@
 // performance.service.ts
-import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { PERMISSIONS_KEY } from '../authorization/decorators/roles.decorators';
+import { Permission } from '../authorization/constants/permissions.constant';
+import { UserRole } from '../authorization/constants/roles.constant';
+import { AuthUser } from '../authorization/interfaces/auth-user.interface';
+
+
+import { NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
@@ -294,22 +302,21 @@ export class PerformanceService {
     return this.assignmentModel.insertMany(prepared);
   }
 
-  async getAssignmentsForManager(managerId: string) {
-    const manager = await this.employeeModel.findById(managerId);
-    if (!manager) throw new NotFoundException(`Manager ${managerId} not found`);
-
-    const assignments = await this.assignmentModel
-      .find({ managerProfileId: managerId })
-      .populate('cycleId templateId employeeProfileId departmentId positionId')
-      .exec();
-
-    if (!assignments.length) {
-      // return empty array for UX instead of throwing for missing assignments
-      return [];
+async getAssignmentsForManager(managerId: string, user?: AuthUser) {
+  if (user && user.role !== UserRole.HR_MANAGER && user.role !== UserRole.HR_ADMIN) {
+    if (user.employeeId !== managerId) {
+      throw new ForbiddenException('You can only view your own assignments');
     }
-
-    return assignments;
   }
+
+  const manager = await this.employeeModel.findById(managerId);
+  if (!manager) throw new NotFoundException(`Manager ${managerId} not found`);
+
+  return this.assignmentModel
+    .find({ managerProfileId: managerId })
+    .populate('cycleId templateId employeeProfileId departmentId positionId')
+    .exec();
+}
 
   async getAssignmentsForEmployee(employeeId: string) {
     const employee = await this.employeeModel.findById(employeeId);
