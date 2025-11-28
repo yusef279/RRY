@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
+import { APP_GUARD } from '@nestjs/core';
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -14,19 +15,24 @@ import { PerformanceModule } from './performance/performance.module';
 import { PayrollConfigurationModule } from './payroll-configuration/payroll-configuration.module';
 import { PayrollExecutionModule } from './payroll-execution/payroll-execution.module';
 
+/* 1. import Auth module */
+import { AuthModule } from './auth';
+import { JwtAuthGuard } from './auth/authorization/guards/jwt-auth.guard';
+import { RolesGuard } from './auth/authorization/guards/roles.guard';
+
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+
+    /* 2. add Auth module */
+    AuthModule,
 
     MongooseModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
         const uri = configService.get<string>('MONGO_URI');
         if (!uri) throw new Error('MONGO_URI is not defined in .env');
-
-        return {
-          uri,
-        };
+        return { uri };
       },
     }),
 
@@ -41,6 +47,12 @@ import { PayrollExecutionModule } from './payroll-execution/payroll-execution.mo
     PerformanceModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide:  APP_GUARD,
+      useClass: RolesGuard,
+    },
+  ],
 })
 export class AppModule {}
