@@ -8,6 +8,7 @@ import {
   Body,
   Query,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import { PerformanceService } from './performance.service';
 import {
@@ -20,19 +21,19 @@ import {
   RaiseDisputeDto,
   ResolveDisputeDto,
 } from './dto/performance.dto';
-import { JwtAuthGuard } from '../authorization/guards/jwt-auth.guard';
-import { RolesGuard } from '../authorization/guards/roles.guard';
-import { Permissions } from '../authorization/decorators/roles.decorators';
-import { Permission } from '../authorization/constants/permissions.constant';
+import { JwtAuthGuard } from '../auth/authorization/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/authorization/guards/roles.guard';
+import { Permissions } from '../auth/authorization/decorators/roles.decorators';
+import { Permission } from '../auth/authorization/constants/permissions.constant';
+import { AuthUser } from '../auth/authorization/interfaces/auth-user.interface';
+import { Request } from 'express';
 
 @Controller('performance')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class PerformanceController {
   constructor(private readonly service: PerformanceService) {}
 
-  // =============================
-  // Templates (REQ-PP-01)
-  // =============================
+  /* ----------  Templates (REQ-PP-01)  ---------- */
   @Post('templates')
   @Permissions(Permission.MANAGE_APPRAISALS)
   createTemplate(@Body() dto: CreateTemplateDto) {
@@ -63,9 +64,7 @@ export class PerformanceController {
     return this.service.deactivateTemplate(id);
   }
 
-  // =============================
-  // Cycles (REQ-PP-02)
-  // =============================
+  /* ----------  Cycles (REQ-PP-02)  ---------- */
   @Post('cycles')
   @Permissions(Permission.MANAGE_APPRAISALS)
   createCycle(@Body() dto: CreateCycleDto) {
@@ -96,25 +95,31 @@ export class PerformanceController {
     return this.service.closeCycle(id);
   }
 
-  // =============================
-  // Assignments (REQ-PP-05, REQ-PP-13)
-  // =============================
+  /* ----------  Assignments (REQ-PP-05, REQ-PP-13)  ---------- */
   @Post('assignments/bulk')
   @Permissions(Permission.MANAGE_APPRAISALS)
   bulkAssign(@Body() dto: BulkAssignDto) {
     return this.service.bulkAssign(dto);
   }
 
+  /**  USER-SCOPED  */
   @Get('assignments/manager/:managerId')
   @Permissions(Permission.CONDUCT_APPRAISALS)
-  getAssignmentsForManager(@Param('managerId') managerId: string) {
-    return this.service.getAssignmentsForManager(managerId);
+  getAssignmentsForManager(
+    @Param('managerId') managerId: string,
+    @Req() req: Request & { user: AuthUser },
+  ) {
+    return this.service.getAssignmentsForManager(managerId.toString(), req.user);
   }
 
+  /**  USER-SCOPED  */
   @Get('assignments/employee/:employeeId')
   @Permissions(Permission.VIEW_OWN_APPRAISAL)
-  getAssignmentsForEmployee(@Param('employeeId') employeeId: string) {
-    return this.service.getAssignmentsForEmployee(employeeId);
+  getAssignmentsForEmployee(
+    @Param('employeeId') employeeId: string,
+    @Req() req: Request & { user: AuthUser },
+  ) {
+    return this.service.getAssignmentsForEmployee(employeeId.toString(), req.user);
   }
 
   @Get('assignments/:id')
@@ -123,13 +128,12 @@ export class PerformanceController {
     return this.service.getAssignmentById(id);
   }
 
-  // =============================
-  // Records (REQ-AE-03, REQ-AE-04)
-  // =============================
+  /* ----------  Records (REQ-AE-03, REQ-AE-04)  ---------- */
+  /**  USER-SCOPED  */
   @Post('records')
   @Permissions(Permission.CONDUCT_APPRAISALS)
-  submitRecord(@Body() dto: SubmitRecordDto) {
-    return this.service.submitRecord(dto);
+  submitRecord(@Body() dto: SubmitRecordDto, @Req() req: Request & { user: AuthUser }) {
+    return this.service.submitRecord(dto, req.user);
   }
 
   @Get('records/:id')
@@ -141,22 +145,25 @@ export class PerformanceController {
   @Patch('records/:id/publish')
   @Permissions(Permission.MANAGE_APPRAISALS)
   publishRecord(@Param('id') id: string, @Body() body: PublishRecordDto) {
-    return this.service.publishRecord(id, body.hrPublishedById);
+    return this.service.publishRecord(id, body.hrPublishedById?.toString());
   }
 
-  @Patch('records/:id/acknowledge')
-  @Permissions(Permission.VIEW_OWN_APPRAISAL)
-  acknowledge(@Param('id') id: string, @Body() body: AcknowledgeRecordDto) {
-    return this.service.acknowledgeRecord(id, body.employeeId, body.comment);
-  }
-
-  // =============================
-  // Disputes (REQ-AE-07, REQ-OD-07)
-  // =============================
+  /**  USER-SCOPED  */
+@Patch('records/:id/acknowledge')
+@Permissions(Permission.VIEW_OWN_APPRAISAL)
+acknowledge(
+  @Param('id') id: string,
+  @Req() req: Request & { user: AuthUser },
+  @Body() body: AcknowledgeRecordDto,
+) {
+  return this.service.acknowledgeRecord(id, body.employeeId.toString(), body.comment, req.user);
+}
+  /* ----------  Disputes (REQ-AE-07, REQ-OD-07)  ---------- */
+  /**  USER-SCOPED  */
   @Post('disputes')
   @Permissions(Permission.VIEW_OWN_APPRAISAL)
-  raiseDispute(@Body() dto: RaiseDisputeDto) {
-    return this.service.raiseDispute(dto);
+  raiseDispute(@Body() dto: RaiseDisputeDto, @Req() req: Request & { user: AuthUser }) {
+    return this.service.raiseDispute(dto, req.user);
   }
 
   @Get('disputes')
@@ -177,28 +184,29 @@ export class PerformanceController {
     return this.service.resolveDispute(id, body);
   }
 
-  // =============================
-  // Reminders, Reports, Dashboard
-  // =============================
+  /* ----------  Reminders / Reports / Dashboard  ---------- */
   @Post('cycles/:cycleId/reminders')
   @Permissions(Permission.MANAGE_APPRAISALS)
   sendReminders(@Param('cycleId') cycleId: string) {
     return this.service.sendPendingReminders(cycleId);
   }
 
+  /**  USER-SCOPED  */
   @Get('employees/:employeeId/history')
   @Permissions(Permission.VIEW_OWN_APPRAISAL, Permission.MANAGE_APPRAISALS)
   getEmployeeHistory(
     @Param('employeeId') employeeId: string,
+    @Req() req: Request & { user: AuthUser },
     @Query('limit') limit?: number,
   ) {
-    return this.service.getEmployeeAppraisalHistory(employeeId, limit);
+    return this.service.getEmployeeAppraisalHistory(employeeId, limit, req.user);
   }
 
+  /**  USER-SCOPED  */
   @Get('employees/:employeeId/trends')
   @Permissions(Permission.VIEW_OWN_APPRAISAL, Permission.MANAGE_APPRAISALS)
-  getEmployeeTrends(@Param('employeeId') employeeId: string) {
-    return this.service.getEmployeeAppraisalTrends(employeeId);
+  getEmployeeTrends(@Param('employeeId') employeeId: string, @Req() req: Request & { user: AuthUser }) {
+    return this.service.getEmployeeAppraisalTrends(employeeId, req.user);
   }
 
   @Get('reports/cycle/:cycleId')

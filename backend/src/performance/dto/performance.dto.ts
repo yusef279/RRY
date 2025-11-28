@@ -212,6 +212,7 @@ export class SubmitRecordDto {
 
 export class PublishRecordDto {
   @IsOptional()
+  @IsString()          // ← accept string from client
   @IsMongoId()
   hrPublishedById?: Types.ObjectId;
 }
