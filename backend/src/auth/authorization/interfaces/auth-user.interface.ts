@@ -5,6 +5,8 @@ export interface AuthUser {
   role: UserRole;
   employeeId?: string;
   departmentId?: string;
+  positionId?: string; // ← add this
+
 }
 
 export interface JwtPayload {
