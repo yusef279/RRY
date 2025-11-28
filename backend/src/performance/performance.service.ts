@@ -576,13 +576,18 @@ export class PerformanceService {
     return dispute;
   }
 
-  async listDisputes(query: any) {
-    return this.disputeModel
-      .find(query)
-      .populate('appraisalId raisedByEmployeeId resolvedByEmployeeId')
-      .exec();
+async listDisputes(query: any) {
+  const disputes = await this.disputeModel
+    .find(query)
+    .populate('appraisalId raisedByEmployeeId resolvedByEmployeeId')
+    .exec();
+
+  if (!disputes || disputes.length === 0) {
+    throw new NotFoundException('No disputes found');
   }
 
+  return disputes;
+}
   // =============================
   // Reminders, Reports, Dashboard, Department Progress
   // =============================
