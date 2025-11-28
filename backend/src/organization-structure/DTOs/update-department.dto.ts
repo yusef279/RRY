@@ -1,11 +1,15 @@
-export class UpdateDepartmentDto {
-  name?: string;
-  description?: string;
-  isActive?: boolean;
+import { IsOptional, IsString } from 'class-validator';
 
-  /**
-   * Optional: employee profile ID of the admin who is updating this department.
-   * Used only for audit logging.
-   */
+export class UpdateDepartmentDto {
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsString()
   performedByEmployeeId?: string;
 }

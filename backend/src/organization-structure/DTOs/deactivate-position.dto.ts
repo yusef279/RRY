@@ -1,22 +1,19 @@
-export class DeactivatePositionDto {
-  /**
-   * Date from which the position is considered closed (delimited).
-   */
-  closedAt: Date;
+import { IsOptional, IsString, IsDateString } from 'class-validator';
 
-  /**
-   * Optional reason for deactivation (e.g., re-org, redundancy).
-   */
+export class DeactivatePositionDto {
+  @IsOptional()
+  @IsDateString()
+  closedAt?: string;
+
+  @IsOptional()
+  @IsString()
   reason?: string;
 
-  /**
-   * Optional notes.
-   */
+  @IsOptional()
+  @IsString()
   notes?: string;
 
-  /**
-   * Optional: employee profile ID of the admin who is deactivating this position.
-   * Used only for audit logging.
-   */
+  @IsOptional()
+  @IsString()
   performedByEmployeeId?: string;
 }

@@ -1,26 +1,35 @@
+import {
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsEnum,
+} from 'class-validator';
 import { StructureRequestType } from '../enums/organization-structure.enums';
 
 export class CreateStructureChangeRequestDto {
-  /**
-   * If not provided, the service will generate a request number.
-   */
-  requestNumber?: string;
-
-  requestedByEmployeeId: string;
+  @IsEnum(StructureRequestType)
   requestType: StructureRequestType;
 
+  @IsString()
+  @IsNotEmpty()
+  requestedByEmployeeId: string;
+
+  @IsOptional()
+  @IsString()
   targetDepartmentId?: string;
+
+  @IsOptional()
+  @IsString()
   targetPositionId?: string;
 
-  /**
-   * Free JSON payload describing the structural change.
-   * Will be stringified into the `details` string field.
-   * Example for NEW_POSITION: { code, title, departmentId, reportsToPositionId }
-   */
-  details?: Record<string, any>;
+  @IsOptional()
+  details?: any; // JSON object
 
-  /**
-   * Business justification for the request.
-   */
+  @IsOptional()
+  @IsString()
   reason?: string;
+
+  @IsOptional()
+  @IsString()
+  requestNumber?: string;
 }

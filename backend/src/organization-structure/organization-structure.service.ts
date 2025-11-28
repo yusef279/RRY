@@ -8,11 +8,6 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 
 import {
-  EmployeeProfile,
-  EmployeeProfileDocument,
-} from '../employee-profile/models/employee-profile.schema';
-
-import {
   Department,
   DepartmentDocument,
 } from './models/department.schema';
@@ -25,13 +20,13 @@ import {
   PositionAssignmentDocument,
 } from './models/position-assignment.schema';
 import {
-  StructureChangeLog,
-  StructureChangeLogDocument,
-} from './models/structure-change-log.schema';
-import {
   StructureChangeRequest,
   StructureChangeRequestDocument,
 } from './models/structure-change-request.schema';
+import {
+  StructureChangeLog,
+  StructureChangeLogDocument,
+} from './models/structure-change-log.schema';
 import {
   StructureApproval,
   StructureApprovalDocument,
@@ -43,6 +38,11 @@ import {
   StructureRequestStatus,
   StructureRequestType,
 } from './enums/organization-structure.enums';
+
+import {
+  EmployeeProfile,
+  EmployeeProfileDocument,
+} from '../employee-profile/models/employee-profile.schema';
 
 import { CreateDepartmentDto } from './DTOs/create-department.dto';
 import { UpdateDepartmentDto } from './DTOs/update-department.dto';
@@ -73,209 +73,290 @@ export class OrganizationStructureService {
 
     @InjectModel(StructureApproval.name)
     private readonly approvalModel: Model<StructureApprovalDocument>,
-    
-        @InjectModel(EmployeeProfile.name)
-    private readonly employeeModel: Model<EmployeeProfileDocument>,
 
+    @InjectModel(EmployeeProfile.name)
+    private readonly employeeModel: Model<EmployeeProfileDocument>,
   ) {}
 
-  // -----------------------------------------------------------
-  // LOGGING HELPER (SAFE SNAPSHOT CLEANING)
-  // -----------------------------------------------------------
-  private cleanSnapshot(object: any) {
-    return object ? JSON.parse(JSON.stringify(object)) : undefined;
+  // ============================================================
+  // UTILITIES
+  // ============================================================
+
+  private clean(obj: any) {
+    return obj ? JSON.parse(JSON.stringify(obj)) : undefined;
   }
 
-  private async logChange(entry: {
+  private async log(entry: {
     action: ChangeLogAction;
     entityType: string;
     entityId: Types.ObjectId;
-    beforeSnapshot?: any;
-    afterSnapshot?: any;
+    before?: any;
+    after?: any;
     summary?: string;
-    performedByEmployeeId?: string | Types.ObjectId;
+    performedByEmployeeId?: string;
   }) {
-    const cleanBefore = this.cleanSnapshot(entry.beforeSnapshot);
-    const cleanAfter = this.cleanSnapshot(entry.afterSnapshot);
-
-    await this.logModel.create({
-      action: entry.action,
-      entityType: entry.entityType,
-      entityId: entry.entityId,
-      beforeSnapshot: cleanBefore,
-      afterSnapshot: cleanAfter,
-      summary: entry.summary,
-      performedByEmployeeId: entry.performedByEmployeeId
-        ? new Types.ObjectId(entry.performedByEmployeeId)
-        : undefined,
-    });
+    try {
+      await this.logModel.create({
+        action: entry.action,
+        entityType: entry.entityType,
+        entityId: entry.entityId,
+        beforeSnapshot: this.clean(entry.before),
+        afterSnapshot: this.clean(entry.after),
+        summary: entry.summary,
+        performedByEmployeeId: entry.performedByEmployeeId
+          ? new Types.ObjectId(entry.performedByEmployeeId)
+          : undefined,
+      });
+    } catch (err) {
+      // logging must NEVER break business operations
+      // eslint-disable-next-line no-console
+      console.error('StructureChangeLog error:', err);
+    }
   }
 
-  private generateRequestNumber(): string {
+  private generateReqNumber() {
     return `OSR-${Date.now()}`;
   }
 
-  // -----------------------------------------------------------
-  // CREATE DEPARTMENT
-  // -----------------------------------------------------------
-async createDepartment(dto: CreateDepartmentDto) {
-  const exists = await this.deptModel.findOne({ code: dto.code });
-  if (exists) {
-    throw new ConflictException('Department code must be unique.');
-  }
+  // ============================================================
+  // DEPARTMENTS
+  // ============================================================
 
-  // 🔍 Validate performedByEmployeeId exists
-  if (dto.performedByEmployeeId) {
-    const empExists = await this.employeeModel.findById(dto.performedByEmployeeId);
-    if (!empExists) {
-      throw new NotFoundException(
-        `Employee with ID ${dto.performedByEmployeeId} does not exist.`,
-      );
-    }
-  }
-
-  const created = await this.deptModel.create({
-    ...dto,
-    isActive: true,
-  });
-
-  await this.logChange({
-    action: ChangeLogAction.CREATED,
-    entityType: 'Department',
-    entityId: created._id,
-    afterSnapshot: this.cleanSnapshot(created.toObject()),
-    performedByEmployeeId: dto.performedByEmployeeId,
-    summary: `Department ${created.code} created`,
-  });
-
-  return created;
-}
-  // -----------------------------------------------------------
-  // UPDATE DEPARTMENT
-  // -----------------------------------------------------------
-  async updateDepartment(id: string, dto: UpdateDepartmentDto) {
-    const dept = await this.deptModel.findById(id);
-    if (!dept) throw new NotFoundException('Department not found.');
-
-    const before = this.cleanSnapshot(dept.toObject());
-
-    Object.assign(dept, dto);
-    const updated = await dept.save();
-
-    await this.logChange({
-      action: ChangeLogAction.UPDATED,
-      entityType: 'Department',
-      entityId: updated._id,
-      beforeSnapshot: before,
-      afterSnapshot: this.cleanSnapshot(updated.toObject()),
-      summary: `Department ${updated.code} updated`,
-    });
-
-    return updated;
-  }
-
-  // -----------------------------------------------------------
-  // CREATE POSITION
-  // -----------------------------------------------------------
-  async createPosition(dto: CreatePositionDto) {
-    const dept = await this.deptModel.findById(dto.departmentId);
-    if (!dept || !dept.isActive) {
-      throw new BadRequestException('Invalid department.');
-    }
-
-    const exists = await this.posModel.findOne({ code: dto.code });
+  async createDepartment(dto: CreateDepartmentDto) {
+    const exists = await this.deptModel.findOne({ code: dto.code });
     if (exists) {
-      throw new ConflictException('Position code already exists.');
+      throw new ConflictException('Department code must be unique.');
     }
 
-    const created = await this.posModel.create({
-      ...dto,
+    const created = await this.deptModel.create({
+      code: dto.code,
+      name: dto.name,
+      description: dto.description,
       isActive: true,
     });
 
-    await this.logChange({
+    await this.log({
       action: ChangeLogAction.CREATED,
-      entityType: 'Position',
+      entityType: 'Department',
       entityId: created._id,
-      afterSnapshot: this.cleanSnapshot(created.toObject()),
+      after: created.toObject(),
+      summary: `Department ${created.code} created`,
       performedByEmployeeId: dto.performedByEmployeeId,
-      summary: `Position ${created.code} created`,
     });
 
     return created;
   }
 
-  // -----------------------------------------------------------
-  // UPDATE POSITION
-  // -----------------------------------------------------------
-  async updatePosition(id: string, dto: UpdatePositionDto) {
-    const position = await this.posModel.findById(id);
-    if (!position) {
-      throw new NotFoundException('Position not found.');
-    }
+  async updateDepartment(id: string, dto: UpdateDepartmentDto) {
+    const dept = await this.deptModel.findById(id);
+    if (!dept) throw new NotFoundException('Department not found.');
 
-    const before = this.cleanSnapshot(position.toObject());
+    const before = this.clean(dept.toObject());
+    Object.assign(dept, dto);
+    const updated = await dept.save();
 
-    Object.assign(position, dto);
-    const updated = await position.save();
-
-    await this.logChange({
+    await this.log({
       action: ChangeLogAction.UPDATED,
-      entityType: 'Position',
-      entityId: updated._id,
-      beforeSnapshot: before,
-      afterSnapshot: this.cleanSnapshot(updated.toObject()),
-      summary: `Position ${updated.code} updated`,
+      entityType: 'Department',
+      entityId: dept._id,
+      before,
+      after: updated.toObject(),
+      summary: `Department ${dept.code} updated`,
+      performedByEmployeeId: dto.performedByEmployeeId,
     });
 
     return updated;
   }
 
-  // -----------------------------------------------------------
-  // DEACTIVATE (DELIMIT) POSITION
-  // -----------------------------------------------------------
+  async listDepartments() {
+    return this.deptModel.find().lean();
+  }
+
+  async getDepartment(id: string) {
+    const dept = await this.deptModel.findById(id).lean();
+    if (!dept) throw new NotFoundException('Department not found.');
+    return dept;
+  }
+
+  // ============================================================
+  // POSITIONS
+  // (bypass PositionSchema pre('save') to avoid MissingSchemaError)
+  // ============================================================
+
+  async createPosition(dto: CreatePositionDto) {
+    // BR-5: unique code
+    const exists = await this.posModel.findOne({ code: dto.code });
+    if (exists) {
+      throw new ConflictException('Position code must be unique.');
+    }
+
+    // BR-10: valid department
+    const dept = await this.deptModel.findById(dto.departmentId);
+    if (!dept || !dept.isActive) {
+      throw new BadRequestException('Invalid departmentId.');
+    }
+
+    // BR-30: if manager provided, it must exist
+    if (dto.reportsToPositionId) {
+      const manager = await this.posModel.findById(dto.reportsToPositionId);
+      if (!manager) {
+        throw new BadRequestException('reportsToPositionId does not exist.');
+      }
+    }
+
+    // IMPORTANT: use raw collection.insertOne to BYPASS pre('save') hook
+    const insertResult = await this.posModel.collection.insertOne({
+      code: dto.code,
+      title: dto.title,
+      description: dto.description,
+      departmentId: new Types.ObjectId(dto.departmentId),
+      reportsToPositionId: dto.reportsToPositionId
+        ? new Types.ObjectId(dto.reportsToPositionId)
+        : null,
+      jobKey: (dto as any).jobKey,
+      payGrade: (dto as any).payGrade,
+      costCenter: (dto as any).costCenter,
+      isActive: true,
+    });
+
+    const created = await this.posModel.findById(insertResult.insertedId);
+    if (!created) {
+      throw new NotFoundException('Position not found after creation.');
+    }
+
+    await this.log({
+      action: ChangeLogAction.CREATED,
+      entityType: 'Position',
+      entityId: created._id,
+      after: created.toObject(),
+      summary: `Position ${created.code} created`,
+      performedByEmployeeId: dto.performedByEmployeeId,
+    });
+
+    return created;
+  }
+
+  async updatePosition(id: string, dto: UpdatePositionDto) {
+    const pos = await this.posModel.findById(id);
+    if (!pos) throw new NotFoundException('Position not found.');
+
+    const before = this.clean(pos.toObject());
+
+    if (dto.departmentId) {
+      const dept = await this.deptModel.findById(dto.departmentId);
+      if (!dept || !dept.isActive) {
+        throw new BadRequestException('Invalid departmentId.');
+      }
+    }
+
+    if (dto.reportsToPositionId) {
+      const manager = await this.posModel.findById(dto.reportsToPositionId);
+      if (!manager) {
+        throw new BadRequestException('reportsToPositionId does not exist.');
+      }
+      if (dto.reportsToPositionId === id) {
+        throw new BadRequestException('Position cannot report to itself.');
+      }
+    }
+
+    // BYPASS doc.save() (which would trigger pre('save'))
+    await this.posModel.updateOne(
+      { _id: new Types.ObjectId(id) },
+      {
+        $set: {
+          ...dto,
+          departmentId: dto.departmentId
+            ? new Types.ObjectId(dto.departmentId)
+            : pos.departmentId,
+          reportsToPositionId: dto.reportsToPositionId
+            ? new Types.ObjectId(dto.reportsToPositionId)
+            : pos.reportsToPositionId,
+        },
+      },
+    );
+
+    const updated = await this.posModel.findById(id);
+    if (!updated) {
+      throw new NotFoundException('Position not found after update.');
+    }
+
+    await this.log({
+      action: ChangeLogAction.UPDATED,
+      entityType: 'Position',
+      entityId: updated._id,
+      before,
+      after: updated.toObject(),
+      summary: `Position ${updated.code} updated`,
+      performedByEmployeeId: dto.performedByEmployeeId,
+    });
+
+    return updated;
+  }
+
   async deactivatePosition(id: string, dto: DeactivatePositionDto) {
     const pos = await this.posModel.findById(id);
-    if (!pos) {
-      throw new NotFoundException('Position not found.');
-    }
+    if (!pos) throw new NotFoundException('Position not found.');
 
     if (!pos.isActive) return pos;
 
-    const before = this.cleanSnapshot(pos.toObject());
-    const closedAt = dto.closedAt ?? new Date();
+    const before = this.clean(pos.toObject());
+    const closedAt = dto.closedAt ? new Date(dto.closedAt) : new Date();
 
-    const activeAssignments = await this.assignmentModel.find({
+    // Close active assignments
+    const assignments = await this.assignmentModel.find({
       positionId: pos._id,
       endDate: { $exists: false },
     });
 
-    for (const a of activeAssignments) {
+    for (const a of assignments) {
       a.endDate = closedAt;
-      if (dto.reason) a.reason = dto.reason;
-      if (dto.notes) a.notes = dto.notes;
+      if (dto.reason) (a as any).reason = dto.reason;
+      if (dto.notes) (a as any).notes = dto.notes;
       await a.save();
     }
 
-    pos.isActive = false;
-    const updated = await pos.save();
+    // BYPASS doc.save() to avoid position pre('save') hook
+    await this.posModel.updateOne(
+      { _id: pos._id },
+      {
+        $set: {
+          isActive: false,
+        },
+      },
+    );
 
-    await this.logChange({
+    const updated = await this.posModel.findById(pos._id);
+    if (!updated) {
+      throw new NotFoundException('Position not found after deactivation.');
+    }
+
+    await this.log({
       action: ChangeLogAction.DEACTIVATED,
       entityType: 'Position',
-      entityId: pos._id,
-      beforeSnapshot: before,
-      afterSnapshot: this.cleanSnapshot(updated.toObject()),
+      entityId: updated._id,
+      before,
+      after: updated.toObject(),
+      summary: `Position ${updated.code} deactivated`,
       performedByEmployeeId: dto.performedByEmployeeId,
-      summary: `Position ${pos.code} deactivated`,
     });
 
     return updated;
   }
 
-  // -----------------------------------------------------------
-  // TREE VIEW
-  // -----------------------------------------------------------
+  async listPositions() {
+    return this.posModel.find().lean();
+  }
+
+  async getPosition(id: string) {
+    const pos = await this.posModel.findById(id).lean();
+    if (!pos) throw new NotFoundException('Position not found.');
+    return pos;
+  }
+
+  // ============================================================
+  // TREE VIEW (REQ-SANV-01/02)
+  // ============================================================
+
   async getOrgTree() {
     const depts = await this.deptModel.find({ isActive: true }).lean();
     const positions = await this.posModel.find({ isActive: true }).lean();
@@ -299,13 +380,8 @@ async createDepartment(dto: CreateDepartmentDto) {
     }
 
     return depts.map((d) => ({
-      department: {
-        _id: d._id.toString(),
-        code: d.code,
-        name: d.name,
-        description: d.description,
-      },
-      positions: [...posMap.values()].filter(
+      department: d,
+      rootPositions: [...posMap.values()].filter(
         (p) =>
           p.departmentId === d._id.toString() &&
           !p.reportsToPositionId,
@@ -313,17 +389,82 @@ async createDepartment(dto: CreateDepartmentDto) {
     }));
   }
 
-  // -----------------------------------------------------------
-  // CREATE CHANGE REQUEST
-  // -----------------------------------------------------------
+  async getEmployeeTree(employeeId: string) {
+    const emp = await this.employeeModel.findById(employeeId);
+    if (!emp) throw new NotFoundException('Employee not found.');
+
+    const assignment = await this.assignmentModel.findOne({
+      employeeId,
+      endDate: { $exists: false },
+    });
+
+    if (!assignment) {
+      throw new NotFoundException('Employee has no active position.');
+    }
+
+    const pos = await this.posModel.findById(assignment.positionId);
+    if (!pos) throw new NotFoundException('Position not found.');
+
+    return this.buildSubtree(pos._id.toString());
+  }
+
+  async getManagerTree(managerEmployeeId: string) {
+    const manager = await this.employeeModel.findById(managerEmployeeId);
+    if (!manager) throw new NotFoundException('Manager not found.');
+
+    const assignment = await this.assignmentModel.findOne({
+      employeeId: managerEmployeeId,
+      endDate: { $exists: false },
+    });
+
+    if (!assignment) {
+      throw new NotFoundException('Manager has no active position.');
+    }
+
+    const managerPos = await this.posModel.findById(assignment.positionId);
+    if (!managerPos) throw new NotFoundException('Position not found.');
+
+    return this.buildSubtree(managerPos._id.toString());
+  }
+
+  private async buildSubtree(rootId: string) {
+    const positions = await this.posModel.find({ isActive: true }).lean();
+
+    const posMap = new Map<string, any>();
+    for (const p of positions) {
+      posMap.set(p._id.toString(), {
+        ...p,
+        _id: p._id.toString(),
+        reportsToPositionId: p.reportsToPositionId?.toString(),
+        children: [],
+      });
+    }
+
+    for (const p of posMap.values()) {
+      if (p.reportsToPositionId && posMap.has(p.reportsToPositionId)) {
+        posMap.get(p.reportsToPositionId).children.push(p);
+      }
+    }
+
+    return posMap.get(rootId);
+  }
+
+  // ============================================================
+  // CHANGE REQUEST WORKFLOW (REQ-OSM-03/04/09, BR-36)
+  // ============================================================
+
   async createChangeRequest(dto: CreateStructureChangeRequestDto) {
-    const requestNumber =
-      dto.requestNumber ?? this.generateRequestNumber();
+    const emp = await this.employeeModel.findById(dto.requestedByEmployeeId);
+    if (!emp) {
+      throw new NotFoundException('requestedByEmployeeId does not exist.');
+    }
+
+    const requestNumber = dto.requestNumber ?? this.generateReqNumber();
 
     const created = await this.requestModel.create({
       requestNumber,
-      requestedByEmployeeId: new Types.ObjectId(dto.requestedByEmployeeId),
       requestType: dto.requestType,
+      requestedByEmployeeId: new Types.ObjectId(dto.requestedByEmployeeId),
       targetDepartmentId: dto.targetDepartmentId
         ? new Types.ObjectId(dto.targetDepartmentId)
         : undefined,
@@ -333,25 +474,21 @@ async createDepartment(dto: CreateDepartmentDto) {
       details: dto.details ? JSON.stringify(dto.details) : undefined,
       reason: dto.reason,
       status: StructureRequestStatus.SUBMITTED,
-      submittedByEmployeeId: new Types.ObjectId(dto.requestedByEmployeeId),
       submittedAt: new Date(),
     });
 
-    await this.logChange({
+    await this.log({
       action: ChangeLogAction.CREATED,
       entityType: 'StructureChangeRequest',
       entityId: created._id,
-      afterSnapshot: this.cleanSnapshot(created.toObject()),
+      after: created.toObject(),
+      summary: `Change request ${requestNumber} created`,
       performedByEmployeeId: dto.requestedByEmployeeId,
-      summary: `Change Request ${requestNumber} created`,
     });
 
     return created;
   }
 
-  // -----------------------------------------------------------
-  // GET PENDING REQUESTS
-  // -----------------------------------------------------------
   async getPendingChangeRequests() {
     return this.requestModel
       .find({
@@ -365,28 +502,18 @@ async createDepartment(dto: CreateDepartmentDto) {
       .lean();
   }
 
-  // -----------------------------------------------------------
-  // APPLY APPROVED CHANGE
-  // -----------------------------------------------------------
-  private async applyApprovedChange(
-    req: StructureChangeRequestDocument,
-  ) {
-    switch (req.requestType) {
-      case StructureRequestType.CLOSE_POSITION:
-        if (req.targetPositionId)
-          await this.deactivatePosition(
-            req.targetPositionId.toString(),
-            { closedAt: new Date(), reason: req.reason },
-          );
-        break;
+  async getChangeRequest(id: string) {
+    const req = await this.requestModel.findById(id).lean();
+    if (!req) throw new NotFoundException('Change request not found.');
+    return req;
+  }
 
+  private async applyApproved(req: StructureChangeRequestDocument) {
+    switch (req.requestType) {
       case StructureRequestType.UPDATE_POSITION:
         if (req.targetPositionId && req.details) {
           const data = JSON.parse(req.details);
-          await this.updatePosition(
-            req.targetPositionId.toString(),
-            data,
-          );
+          await this.updatePosition(req.targetPositionId.toString(), data);
         }
         break;
 
@@ -400,19 +527,25 @@ async createDepartment(dto: CreateDepartmentDto) {
         }
         break;
 
+      case StructureRequestType.CLOSE_POSITION:
+        if (req.targetPositionId) {
+          await this.deactivatePosition(req.targetPositionId.toString(), {
+            closedAt: new Date().toISOString(),
+            reason: req.reason,
+          });
+        }
+        break;
+
       default:
         break;
     }
   }
 
-  // -----------------------------------------------------------
-  // APPROVE
-  // -----------------------------------------------------------
   async approveChangeRequest(
-    requestId: Types.ObjectId,
+    id: Types.ObjectId,
     dto: ApproveStructureChangeRequestDto,
   ) {
-    const req = await this.requestModel.findById(requestId);
+    const req = await this.requestModel.findById(id);
     if (!req) throw new NotFoundException('Request not found.');
 
     if (
@@ -422,7 +555,7 @@ async createDepartment(dto: CreateDepartmentDto) {
       throw new BadRequestException('Request already finalized.');
     }
 
-    const before = this.cleanSnapshot(req.toObject());
+    const before = this.clean(req.toObject());
 
     req.status = StructureRequestStatus.APPROVED;
     await req.save();
@@ -435,39 +568,36 @@ async createDepartment(dto: CreateDepartmentDto) {
       comments: dto.comments,
     });
 
-    await this.applyApprovedChange(req);
+    await this.applyApproved(req);
 
-    await this.logChange({
+    await this.log({
       action: ChangeLogAction.UPDATED,
       entityType: 'StructureChangeRequest',
       entityId: req._id,
-      beforeSnapshot: before,
-      afterSnapshot: this.cleanSnapshot(req.toObject()),
-      performedByEmployeeId: dto.approverEmployeeId,
+      before,
+      after: req.toObject(),
       summary: `Request ${req.requestNumber} approved`,
+      performedByEmployeeId: dto.approverEmployeeId,
     });
 
     return req;
   }
 
-  // -----------------------------------------------------------
-  // REJECT
-  // -----------------------------------------------------------
   async rejectChangeRequest(
-    requestId: Types.ObjectId,
+    id: Types.ObjectId,
     dto: RejectStructureChangeRequestDto,
   ) {
-    const req = await this.requestModel.findById(requestId);
+    const req = await this.requestModel.findById(id);
     if (!req) throw new NotFoundException('Request not found.');
 
     if (
       req.status === StructureRequestStatus.APPROVED ||
       req.status === StructureRequestStatus.REJECTED
     ) {
-      throw new BadRequestException('Already finalized.');
+      throw new BadRequestException('Request already finalized.');
     }
 
-    const before = this.cleanSnapshot(req.toObject());
+    const before = this.clean(req.toObject());
 
     req.status = StructureRequestStatus.REJECTED;
     await req.save();
@@ -480,14 +610,14 @@ async createDepartment(dto: CreateDepartmentDto) {
       comments: dto.comments,
     });
 
-    await this.logChange({
+    await this.log({
       action: ChangeLogAction.UPDATED,
       entityType: 'StructureChangeRequest',
       entityId: req._id,
-      beforeSnapshot: before,
-      afterSnapshot: this.cleanSnapshot(req.toObject()),
-      performedByEmployeeId: dto.approverEmployeeId,
+      before,
+      after: req.toObject(),
       summary: `Request ${req.requestNumber} rejected`,
+      performedByEmployeeId: dto.approverEmployeeId,
     });
 
     return req;

@@ -1,23 +1,43 @@
+import {
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsNumber,
+} from 'class-validator';
+
 export class CreatePositionDto {
-  code: string;
+  @IsString()
+  @IsNotEmpty()
+  code: string; // Unique ID (BR-5)
+
+  @IsString()
+  @IsNotEmpty()
   title: string;
+
+  @IsString()
+  @IsNotEmpty()
+  jobKey: string; // BR-10
+
+  @IsNumber()
+  payGrade: number; // BR-10
+
+  @IsString()
+  @IsNotEmpty()
+  departmentId: string; // BR-10
+
+  @IsString()
+  @IsNotEmpty()
+  costCenter: string; // BR-30
+
+  @IsString()
+  @IsNotEmpty()
+  reportsToPositionId: string; // BR-30
+
+  @IsOptional()
+  @IsString()
   description?: string;
 
-  /**
-   * Required – every position must belong to a department.
-   * BR 10: Position must have Dept ID. :contentReference[oaicite:2]{index=2}
-   */
-  departmentId: string;
-
-  /**
-   * Optional explicit manager / reports-to.
-   * If omitted, the schema hook will default to department head. :contentReference[oaicite:3]{index=3}
-   */
-  reportsToPositionId?: string;
-
-  /**
-   * Optional: employee profile ID of the admin who is creating this position.
-   * Used only for audit logging.
-   */
+  @IsOptional()
+  @IsString()
   performedByEmployeeId?: string;
 }
