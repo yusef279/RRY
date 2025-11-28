@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -53,7 +54,6 @@ import { CreateStructureChangeRequestDto } from './DTOs/create-structure-change-
 import { ApproveStructureChangeRequestDto } from './DTOs/approve-structure-change-request.dto';
 import { RejectStructureChangeRequestDto } from './DTOs/reject-structure-change-request.dto';
 
-
 @Injectable()
 export class OrganizationStructureService {
   constructor(
@@ -77,8 +77,6 @@ export class OrganizationStructureService {
 
     @InjectModel(EmployeeProfile.name)
     private readonly employeeModel: Model<EmployeeProfileDocument>,
-
-    // @Inject(NotificationService) private readonly notificationService: NotificationService,
   ) {}
 
   // ============================================================
@@ -90,10 +88,10 @@ export class OrganizationStructureService {
   }
 
   private async notify(event: string, payload: any) {
-    // If you have NotificationService:
+    // If NotificationService is available:
     // await this.notificationService.send(event, payload);
 
-    // Safe fallback:
+    // Fallback logging:
     console.log('NOTIFICATION:', event, payload);
   }
 
@@ -138,7 +136,6 @@ export class OrganizationStructureService {
     if (!newManagerId) return false;
 
     let current = newManagerId;
-
     while (current) {
       if (current === positionId) return true;
 
@@ -147,7 +144,6 @@ export class OrganizationStructureService {
 
       current = manager.reportsToPositionId.toString();
     }
-
     return false;
   }
 
@@ -244,15 +240,7 @@ export class OrganizationStructureService {
       if (!manager) {
         throw new BadRequestException('reportsToPositionId does not exist.');
       }
-
-      if (
-        await this.createsCircularReporting(
-          dto.reportsToPositionId,
-          dto.reportsToPositionId,
-        )
-      ) {
-        throw new BadRequestException('Circular reporting line detected.');
-      }
+      // 🔹 REQ-OSM-09: REMOVE circular check during creation
     }
 
     const insertResult = await this.posModel.collection.insertOne({
@@ -418,42 +406,17 @@ export class OrganizationStructureService {
   }
 
   // ============================================================
-  // TREE VIEW LOGIC
+  // TREE VIEW LOGIC (BR 41)
   // ============================================================
 
-  async getOrgTree() {
-    const depts = await this.deptModel.find({ isActive: true }).lean();
-    const positions = await this.posModel.find({ isActive: true }).lean();
-
-    const posMap = new Map<string, any>();
-
-    for (const p of positions) {
-      posMap.set(p._id.toString(), {
-        ...p,
-        _id: p._id.toString(),
-        departmentId: p.departmentId.toString(),
-        reportsToPositionId: p.reportsToPositionId?.toString(),
-        children: [],
-      });
+  async getEmployeeTree(employeeId: string, reqUser: any) {
+    if (
+      reqUser.role === 'Department Employee' &&
+      reqUser.employeeId !== employeeId
+    ) {
+      throw new ForbiddenException('You can only view your own structure.');
     }
 
-    for (const p of posMap.values()) {
-      if (p.reportsToPositionId && posMap.has(p.reportsToPositionId)) {
-        posMap.get(p.reportsToPositionId).children.push(p);
-      }
-    }
-
-    return depts.map((d) => ({
-      department: d,
-      rootPositions: [...posMap.values()].filter(
-        (p) =>
-          p.departmentId === d._id.toString() &&
-          !p.reportsToPositionId,
-      ),
-    }));
-  }
-
-  async getEmployeeTree(employeeId: string) {
     const emp = await this.employeeModel.findById(employeeId);
     if (!emp) throw new NotFoundException('Employee not found.');
 
@@ -461,10 +424,9 @@ export class OrganizationStructureService {
       employeeId,
       endDate: { $exists: false },
     });
-
-    if (!assignment) {
-      throw new NotFoundException('Employee has no active position.');
-    }
+    if (!assignment) throw new NotFoundException(
+      'Employee has no active position.',
+    );
 
     const pos = await this.posModel.findById(assignment.positionId);
     if (!pos) throw new NotFoundException('Position not found.');
@@ -472,7 +434,16 @@ export class OrganizationStructureService {
     return this.buildSubtree(pos._id.toString());
   }
 
-  async getManagerTree(managerEmployeeId: string) {
+  async getManagerTree(managerEmployeeId: string, reqUser: any) {
+    if (
+      reqUser.role === 'Department Head' &&
+      reqUser.employeeId !== managerEmployeeId
+    ) {
+      throw new ForbiddenException(
+        'You may only view your own team structure.',
+      );
+    }
+
     const manager = await this.employeeModel.findById(managerEmployeeId);
     if (!manager) throw new NotFoundException('Manager not found.');
 
@@ -480,10 +451,9 @@ export class OrganizationStructureService {
       employeeId: managerEmployeeId,
       endDate: { $exists: false },
     });
-
-    if (!assignment) {
-      throw new NotFoundException('Manager has no active position.');
-    }
+    if (!assignment) throw new NotFoundException(
+      'Manager has no active position.',
+    );
 
     const managerPos = await this.posModel.findById(assignment.positionId);
     if (!managerPos) throw new NotFoundException('Position not found.');
@@ -493,7 +463,6 @@ export class OrganizationStructureService {
 
   private async buildSubtree(rootId: string) {
     const positions = await this.posModel.find({ isActive: true }).lean();
-
     const posMap = new Map<string, any>();
 
     for (const p of positions) {
@@ -514,15 +483,44 @@ export class OrganizationStructureService {
     return posMap.get(rootId);
   }
 
+  async getOrgTree() {
+    const depts = await this.deptModel.find({ isActive: true }).lean();
+    const positions = await this.posModel.find({ isActive: true }).lean();
+
+    const posMap = new Map<string, any>();
+    for (const p of positions) {
+      posMap.set(p._id.toString(), {
+        ...p,
+        _id: p._id.toString(),
+        departmentId: p.departmentId.toString(),
+        reportsToPositionId: p.reportsToPositionId?.toString(),
+        children: [],
+      });
+    }
+
+    for (const p of posMap.values()) {
+      if (p.reportsToPositionId && posMap.has(p.reportsToPositionId)) {
+        posMap.get(p.reportsToPositionId).children.push(p);
+      }
+    }
+
+    return depts.map((d) => ({
+      department: d,
+      rootPositions: [...posMap.values()].filter(
+        (p) => p.departmentId === d._id.toString() && !p.reportsToPositionId,
+      ),
+    }));
+  }
+
   // ============================================================
-  // CHANGE REQUEST WORKFLOW
+  // CHANGE REQUEST WORKFLOW (REQ-OSM-11)
   // ============================================================
 
   async createChangeRequest(dto: CreateStructureChangeRequestDto) {
     const emp = await this.employeeModel.findById(dto.requestedByEmployeeId);
-    if (!emp) {
-      throw new NotFoundException('requestedByEmployeeId does not exist.');
-    }
+    if (!emp) throw new NotFoundException(
+      'requestedByEmployeeId does not exist.',
+    );
 
     const requestNumber = dto.requestNumber ?? this.generateReqNumber();
 
@@ -550,6 +548,9 @@ export class OrganizationStructureService {
       summary: `Change request ${requestNumber} created`,
       performedByEmployeeId: dto.requestedByEmployeeId,
     });
+
+    // 🔹 REQ-OSM-11: notify on submission
+    await this.notify('STRUCTURE_CHANGE_SUBMITTED', created);
 
     return created;
   }
@@ -597,10 +598,7 @@ export class OrganizationStructureService {
       case StructureRequestType.UPDATE_DEPARTMENT:
         if (req.targetDepartmentId && req.details) {
           const data = JSON.parse(req.details);
-          await this.updateDepartment(
-            req.targetDepartmentId.toString(),
-            data,
-          );
+          await this.updateDepartment(req.targetDepartmentId.toString(), data);
         }
         break;
 
@@ -609,7 +607,7 @@ export class OrganizationStructureService {
           await this.deactivatePosition(req.targetPositionId.toString(), {
             closedAt: new Date().toISOString(),
             reason: req.reason,
-            performedByEmployeeId: undefined, // will be assigned in approveChangeRequest
+            performedByEmployeeId: undefined, // assigned in approval
           });
         }
         break;

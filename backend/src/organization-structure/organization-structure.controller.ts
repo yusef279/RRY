@@ -45,7 +45,7 @@ export class OrganizationStructureController {
     @Body() dto: CreateDepartmentDto,
     @Req() req: Request & { user: AuthUser },
   ) {
-    dto.performedByEmployeeId = req.user.employeeId;
+    dto.performedByEmployeeId = req.user.employeeId!;
     return this.service.createDepartment(dto);
   }
 
@@ -56,7 +56,7 @@ export class OrganizationStructureController {
     @Body() dto: UpdateDepartmentDto,
     @Req() req: Request & { user: AuthUser },
   ) {
-    dto.performedByEmployeeId = req.user.employeeId;
+    dto.performedByEmployeeId = req.user.employeeId!;
     return this.service.updateDepartment(id, dto);
   }
 
@@ -82,7 +82,7 @@ export class OrganizationStructureController {
     @Body() dto: CreatePositionDto,
     @Req() req: Request & { user: AuthUser },
   ) {
-    dto.performedByEmployeeId = req.user.employeeId;
+    dto.performedByEmployeeId = req.user.employeeId!;
     return this.service.createPosition(dto);
   }
 
@@ -93,7 +93,7 @@ export class OrganizationStructureController {
     @Body() dto: UpdatePositionDto,
     @Req() req: Request & { user: AuthUser },
   ) {
-    dto.performedByEmployeeId = req.user.employeeId;
+    dto.performedByEmployeeId = req.user.employeeId!;
     return this.service.updatePosition(id, dto);
   }
 
@@ -104,7 +104,7 @@ export class OrganizationStructureController {
     @Body() dto: DeactivatePositionDto,
     @Req() req: Request & { user: AuthUser },
   ) {
-    dto.performedByEmployeeId = req.user.employeeId;
+    dto.performedByEmployeeId = req.user.employeeId!;
     return this.service.deactivatePosition(id, dto);
   }
 
@@ -121,7 +121,7 @@ export class OrganizationStructureController {
   }
 
   // -------------------------------------------------------------
-  // TREE (REQ-SANV-01 / REQ-SANV-02)
+  // TREE (BR 41)
   // -------------------------------------------------------------
 
   @Get('tree')
@@ -132,16 +132,23 @@ export class OrganizationStructureController {
 
   @Get('tree/employee')
   @Permissions(Permission.VIEW_ORG_STRUCTURE)
-  getEmployeeTree(@Query('employeeId') employeeId: string) {
+  getEmployeeTree(
+    @Query('employeeId') employeeId: string,
+    @Req() req: Request & { user: AuthUser },
+  ) {
     if (!employeeId) throw new BadRequestException('employeeId required');
-    return this.service.getEmployeeTree(employeeId);
+    return this.service.getEmployeeTree(employeeId, req.user);
   }
 
   @Get('tree/manager')
   @Permissions(Permission.VIEW_TEAM_PROFILES, Permission.VIEW_ORG_STRUCTURE)
-  getManagerTree(@Query('managerEmployeeId') managerId: string) {
-    if (!managerId) throw new BadRequestException('managerEmployeeId required');
-    return this.service.getManagerTree(managerId);
+  getManagerTree(
+    @Query('managerEmployeeId') managerId: string,
+    @Req() req: Request & { user: AuthUser },
+  ) {
+    if (!managerId)
+      throw new BadRequestException('managerEmployeeId required');
+    return this.service.getManagerTree(managerId, req.user);
   }
 
   // -------------------------------------------------------------
@@ -177,7 +184,7 @@ export class OrganizationStructureController {
     @Body() dto: ApproveStructureChangeRequestDto,
     @Req() req: Request & { user: AuthUser },
   ) {
-dto.approverEmployeeId = req.user.employeeId!;
+    dto.approverEmployeeId = req.user.employeeId!;
     return this.service.approveChangeRequest(new Types.ObjectId(id), dto);
   }
 
@@ -188,7 +195,7 @@ dto.approverEmployeeId = req.user.employeeId!;
     @Body() dto: RejectStructureChangeRequestDto,
     @Req() req: Request & { user: AuthUser },
   ) {
-dto.approverEmployeeId = req.user.employeeId!;
+    dto.approverEmployeeId = req.user.employeeId!;
     return this.service.rejectChangeRequest(new Types.ObjectId(id), dto);
   }
 }
