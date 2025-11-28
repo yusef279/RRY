@@ -53,6 +53,7 @@ import { CreateStructureChangeRequestDto } from './DTOs/create-structure-change-
 import { ApproveStructureChangeRequestDto } from './DTOs/approve-structure-change-request.dto';
 import { RejectStructureChangeRequestDto } from './DTOs/reject-structure-change-request.dto';
 
+
 @Injectable()
 export class OrganizationStructureService {
   constructor(
@@ -76,6 +77,8 @@ export class OrganizationStructureService {
 
     @InjectModel(EmployeeProfile.name)
     private readonly employeeModel: Model<EmployeeProfileDocument>,
+
+    // @Inject(NotificationService) private readonly notificationService: NotificationService,
   ) {}
 
   // ============================================================
@@ -84,6 +87,14 @@ export class OrganizationStructureService {
 
   private clean(obj: any) {
     return obj ? JSON.parse(JSON.stringify(obj)) : undefined;
+  }
+
+  private async notify(event: string, payload: any) {
+    // If you have NotificationService:
+    // await this.notificationService.send(event, payload);
+
+    // Safe fallback:
+    console.log('NOTIFICATION:', event, payload);
   }
 
   private async log(entry: {
@@ -108,8 +119,6 @@ export class OrganizationStructureService {
           : undefined,
       });
     } catch (err) {
-      // logging must NEVER break business operations
-      // eslint-disable-next-line no-console
       console.error('StructureChangeLog error:', err);
     }
   }
@@ -119,10 +128,37 @@ export class OrganizationStructureService {
   }
 
   // ============================================================
+  // CIRCULAR REPORTING VALIDATION (REQ-OSM-09)
+  // ============================================================
+
+  private async createsCircularReporting(
+    positionId: string,
+    newManagerId: string,
+  ): Promise<boolean> {
+    if (!newManagerId) return false;
+
+    let current = newManagerId;
+
+    while (current) {
+      if (current === positionId) return true;
+
+      const manager = await this.posModel.findById(current).lean();
+      if (!manager?.reportsToPositionId) break;
+
+      current = manager.reportsToPositionId.toString();
+    }
+
+    return false;
+  }
+
+  // ============================================================
   // DEPARTMENTS
   // ============================================================
 
   async createDepartment(dto: CreateDepartmentDto) {
+    if (!dto.performedByEmployeeId)
+      throw new BadRequestException('performedByEmployeeId missing');
+
     const exists = await this.deptModel.findOne({ code: dto.code });
     if (exists) {
       throw new ConflictException('Department code must be unique.');
@@ -144,10 +180,15 @@ export class OrganizationStructureService {
       performedByEmployeeId: dto.performedByEmployeeId,
     });
 
+    await this.notify('DEPARTMENT_CREATED', created);
+
     return created;
   }
 
   async updateDepartment(id: string, dto: UpdateDepartmentDto) {
+    if (!dto.performedByEmployeeId)
+      throw new BadRequestException('performedByEmployeeId missing');
+
     const dept = await this.deptModel.findById(id);
     if (!dept) throw new NotFoundException('Department not found.');
 
@@ -165,6 +206,8 @@ export class OrganizationStructureService {
       performedByEmployeeId: dto.performedByEmployeeId,
     });
 
+    await this.notify('DEPARTMENT_UPDATED', updated);
+
     return updated;
   }
 
@@ -180,31 +223,38 @@ export class OrganizationStructureService {
 
   // ============================================================
   // POSITIONS
-  // (bypass PositionSchema pre('save') to avoid MissingSchemaError)
   // ============================================================
 
   async createPosition(dto: CreatePositionDto) {
-    // BR-5: unique code
+    if (!dto.performedByEmployeeId)
+      throw new BadRequestException('performedByEmployeeId missing');
+
     const exists = await this.posModel.findOne({ code: dto.code });
     if (exists) {
       throw new ConflictException('Position code must be unique.');
     }
 
-    // BR-10: valid department
     const dept = await this.deptModel.findById(dto.departmentId);
     if (!dept || !dept.isActive) {
       throw new BadRequestException('Invalid departmentId.');
     }
 
-    // BR-30: if manager provided, it must exist
     if (dto.reportsToPositionId) {
       const manager = await this.posModel.findById(dto.reportsToPositionId);
       if (!manager) {
         throw new BadRequestException('reportsToPositionId does not exist.');
       }
+
+      if (
+        await this.createsCircularReporting(
+          dto.reportsToPositionId,
+          dto.reportsToPositionId,
+        )
+      ) {
+        throw new BadRequestException('Circular reporting line detected.');
+      }
     }
 
-    // IMPORTANT: use raw collection.insertOne to BYPASS pre('save') hook
     const insertResult = await this.posModel.collection.insertOne({
       code: dto.code,
       title: dto.title,
@@ -213,9 +263,9 @@ export class OrganizationStructureService {
       reportsToPositionId: dto.reportsToPositionId
         ? new Types.ObjectId(dto.reportsToPositionId)
         : null,
-      jobKey: (dto as any).jobKey,
-      payGrade: (dto as any).payGrade,
-      costCenter: (dto as any).costCenter,
+      jobKey: dto.jobKey,
+      payGrade: dto.payGrade,
+      costCenter: dto.costCenter,
       isActive: true,
     });
 
@@ -233,10 +283,15 @@ export class OrganizationStructureService {
       performedByEmployeeId: dto.performedByEmployeeId,
     });
 
+    await this.notify('POSITION_CREATED', created);
+
     return created;
   }
 
   async updatePosition(id: string, dto: UpdatePositionDto) {
+    if (!dto.performedByEmployeeId)
+      throw new BadRequestException('performedByEmployeeId missing');
+
     const pos = await this.posModel.findById(id);
     if (!pos) throw new NotFoundException('Position not found.');
 
@@ -254,12 +309,20 @@ export class OrganizationStructureService {
       if (!manager) {
         throw new BadRequestException('reportsToPositionId does not exist.');
       }
+
       if (dto.reportsToPositionId === id) {
         throw new BadRequestException('Position cannot report to itself.');
       }
+
+      if (
+        await this.createsCircularReporting(id, dto.reportsToPositionId)
+      ) {
+        throw new BadRequestException(
+          'Circular reporting line detected (REQ-OSM-09).',
+        );
+      }
     }
 
-    // BYPASS doc.save() (which would trigger pre('save'))
     await this.posModel.updateOne(
       { _id: new Types.ObjectId(id) },
       {
@@ -290,10 +353,15 @@ export class OrganizationStructureService {
       performedByEmployeeId: dto.performedByEmployeeId,
     });
 
+    await this.notify('POSITION_UPDATED', updated);
+
     return updated;
   }
 
   async deactivatePosition(id: string, dto: DeactivatePositionDto) {
+    if (!dto.performedByEmployeeId)
+      throw new BadRequestException('performedByEmployeeId missing');
+
     const pos = await this.posModel.findById(id);
     if (!pos) throw new NotFoundException('Position not found.');
 
@@ -302,7 +370,6 @@ export class OrganizationStructureService {
     const before = this.clean(pos.toObject());
     const closedAt = dto.closedAt ? new Date(dto.closedAt) : new Date();
 
-    // Close active assignments
     const assignments = await this.assignmentModel.find({
       positionId: pos._id,
       endDate: { $exists: false },
@@ -315,14 +382,9 @@ export class OrganizationStructureService {
       await a.save();
     }
 
-    // BYPASS doc.save() to avoid position pre('save') hook
     await this.posModel.updateOne(
       { _id: pos._id },
-      {
-        $set: {
-          isActive: false,
-        },
-      },
+      { $set: { isActive: false } },
     );
 
     const updated = await this.posModel.findById(pos._id);
@@ -340,6 +402,8 @@ export class OrganizationStructureService {
       performedByEmployeeId: dto.performedByEmployeeId,
     });
 
+    await this.notify('POSITION_DEACTIVATED', updated);
+
     return updated;
   }
 
@@ -354,7 +418,7 @@ export class OrganizationStructureService {
   }
 
   // ============================================================
-  // TREE VIEW (REQ-SANV-01/02)
+  // TREE VIEW LOGIC
   // ============================================================
 
   async getOrgTree() {
@@ -431,6 +495,7 @@ export class OrganizationStructureService {
     const positions = await this.posModel.find({ isActive: true }).lean();
 
     const posMap = new Map<string, any>();
+
     for (const p of positions) {
       posMap.set(p._id.toString(), {
         ...p,
@@ -450,7 +515,7 @@ export class OrganizationStructureService {
   }
 
   // ============================================================
-  // CHANGE REQUEST WORKFLOW (REQ-OSM-03/04/09, BR-36)
+  // CHANGE REQUEST WORKFLOW
   // ============================================================
 
   async createChangeRequest(dto: CreateStructureChangeRequestDto) {
@@ -513,6 +578,18 @@ export class OrganizationStructureService {
       case StructureRequestType.UPDATE_POSITION:
         if (req.targetPositionId && req.details) {
           const data = JSON.parse(req.details);
+
+          if (
+            await this.createsCircularReporting(
+              req.targetPositionId.toString(),
+              data.reportsToPositionId,
+            )
+          ) {
+            throw new BadRequestException(
+              'Circular reporting line detected in approval.',
+            );
+          }
+
           await this.updatePosition(req.targetPositionId.toString(), data);
         }
         break;
@@ -532,6 +609,7 @@ export class OrganizationStructureService {
           await this.deactivatePosition(req.targetPositionId.toString(), {
             closedAt: new Date().toISOString(),
             reason: req.reason,
+            performedByEmployeeId: undefined, // will be assigned in approveChangeRequest
           });
         }
         break;
@@ -545,6 +623,9 @@ export class OrganizationStructureService {
     id: Types.ObjectId,
     dto: ApproveStructureChangeRequestDto,
   ) {
+    if (!dto.approverEmployeeId)
+      throw new BadRequestException('approverEmployeeId missing');
+
     const req = await this.requestModel.findById(id);
     if (!req) throw new NotFoundException('Request not found.');
 
@@ -580,6 +661,8 @@ export class OrganizationStructureService {
       performedByEmployeeId: dto.approverEmployeeId,
     });
 
+    await this.notify('STRUCTURE_CHANGE_APPROVED', req);
+
     return req;
   }
 
@@ -587,6 +670,9 @@ export class OrganizationStructureService {
     id: Types.ObjectId,
     dto: RejectStructureChangeRequestDto,
   ) {
+    if (!dto.approverEmployeeId)
+      throw new BadRequestException('approverEmployeeId missing');
+
     const req = await this.requestModel.findById(id);
     if (!req) throw new NotFoundException('Request not found.');
 
