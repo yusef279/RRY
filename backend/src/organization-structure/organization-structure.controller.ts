@@ -23,15 +23,15 @@ import { CreateStructureChangeRequestDto } from './DTOs/create-structure-change-
 import { ApproveStructureChangeRequestDto } from './DTOs/approve-structure-change-request.dto';
 import { RejectStructureChangeRequestDto } from './DTOs/reject-structure-change-request.dto';
 
-import { JwtAuthGuard } from '../auth/authorization/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/authorization/guards/roles.guard';
-import { Permissions } from '../auth/authorization/decorators/roles.decorators';
-import { Permission } from '../auth/authorization/constants/permissions.constant';
+// import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+// import { RolesGuard } from '../auth/guards/roles.guard';
+import { Permissions } from '../auth/decorators/roles.decorators';
+import { Permission } from '../auth/permissions.constant';
 import { Request } from 'express';
-import { AuthUser } from '../auth/authorization/interfaces/auth-user.interface';
+import { AuthUser } from '../auth/auth-user.interface';
 
 @Controller('organization-structure')
-@UseGuards(JwtAuthGuard, RolesGuard)
+// @UseGuards(JwtAuthGuard, RolesGuard)
 export class OrganizationStructureController {
   constructor(private readonly service: OrganizationStructureService) {}
 

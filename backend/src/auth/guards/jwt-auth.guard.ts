@@ -15,14 +15,16 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       context.getClass(),
     ]);
     
-    if (isPublic) return true;
+    if (isPublic) {
+      return true;
+    }
     
     return super.canActivate(context);
   }
 
   handleRequest(err, user) {
     if (err || !user) {
-      throw err || new UnauthorizedException('Invalid token');
+      throw err || new UnauthorizedException('Invalid or missing token');
     }
     return user;
   }

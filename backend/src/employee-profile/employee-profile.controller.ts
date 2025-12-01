@@ -21,15 +21,14 @@ import { UpdateEmployeeProfileByAdminDto } from './dto/update-employee-profile-a
 import { SetEmployeeSystemRolesDto } from './dto/set-system-roles.dto';
 import { CreateEmployeeProfileDto } from './dto/create-employee-profile.dto';
 
-import { JwtAuthGuard } from '../auth/authorization/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/authorization/guards/roles.guard';
-import { Permissions } from '../auth/authorization/decorators/roles.decorators';
-import { Permission } from '../auth/authorization/constants/permissions.constant';
-import { AuthUser } from '../auth/authorization/interfaces/auth-user.interface';
-import { UserRole } from '../auth/authorization/constants/roles.constant';
+// import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+// import { RolesGuard } from '../auth/guards/roles.guard';
+import { Permissions } from '../auth/decorators/roles.decorators';
+import { Permission,UserRole } from '../auth/permissions.constant';
+import { AuthUser } from '../auth/auth-user.interface';
 
 @Controller('employee-profile')
-@UseGuards(JwtAuthGuard, RolesGuard)
+//@UseGuards(JwtAuthGuard, RolesGuard)
 export class EmployeeProfileController {
   constructor(private readonly employeeProfileService: EmployeeProfileService) {}
 

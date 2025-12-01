@@ -6,9 +6,11 @@ import { ConfigService } from '@nestjs/config';
 import { JwtStrategy } from './jwt.strategy';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
-import { EmployeeProfile, EmployeeProfileSchema } from '../../employee-profile/models/employee-profile.schema';
-import { EmployeeSystemRole, EmployeeSystemRoleSchema } from '../../employee-profile/models/employee-system-role.schema';
-import { Department, DepartmentSchema } from '../../organization-structure/models/department.schema';
+import { EmployeeProfile, EmployeeProfileSchema } from '../employee-profile/models/employee-profile.schema';
+import { EmployeeSystemRole, EmployeeSystemRoleSchema } from '../employee-profile/models/employee-system-role.schema';
+import { Department, DepartmentSchema } from '../organization-structure/models/department.schema';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { RolesGuard } from './guards/roles.guard';
 
 @Module({
   imports: [
@@ -23,11 +25,21 @@ import { Department, DepartmentSchema } from '../../organization-structure/model
     MongooseModule.forFeature([
       { name: EmployeeProfile.name, schema: EmployeeProfileSchema },
       { name: EmployeeSystemRole.name, schema: EmployeeSystemRoleSchema },
-      { name: Department.name, schema: DepartmentSchema },  // ← Add this
+      { name: Department.name, schema: DepartmentSchema },
     ]),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
-  exports: [JwtStrategy, PassportModule],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    JwtAuthGuard,
+    RolesGuard,
+  ],
+  exports: [
+    JwtStrategy,
+    PassportModule,
+    JwtAuthGuard,
+    RolesGuard,
+  ],
 })
 export class AuthModule {}

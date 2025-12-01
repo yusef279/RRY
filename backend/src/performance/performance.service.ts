@@ -26,8 +26,8 @@ import {
   AppraisalRecordStatus,
   AppraisalDisputeStatus,
 } from './enums/performance.enums';
-import { AuthUser } from '../auth/authorization/interfaces/auth-user.interface';
-import { UserRole } from '../auth/authorization/constants/roles.constant';
+import { AuthUser } from '../auth/auth-user.interface';
+import { UserRole } from '../auth/permissions.constant';
 
 @Injectable()
 export class PerformanceService {
