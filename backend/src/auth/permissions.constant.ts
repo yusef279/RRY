@@ -32,12 +32,13 @@ export enum Permission {
   APPROVE_PAYROLL = 'APPROVE_PAYROLL',
   VIEW_OWN_PAYSLIP = 'VIEW_OWN_PAYSLIP',
 }
-import { UserRole } from './roles.constant';
+import { SystemRole } from '../employee-profile/enums/employee-profile.enums';
 
-export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
-  [UserRole.SYSTEM_ADMIN]: Object.values(Permission), // All permissions
+export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
+  [SystemRole.SYSTEM_ADMIN]:
+Object.values(Permission), 
 
-  [UserRole.HR_MANAGER]: [
+  [SystemRole.HR_MANAGER]: [
     Permission.MANAGE_ALL_PROFILES,
     Permission.VIEW_ORG_STRUCTURE,
     Permission.MANAGE_APPRAISALS,
@@ -47,51 +48,51 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     Permission.APPROVE_PAYROLL,
   ],
 
-  [UserRole.HR_ADMIN]: [
+  [SystemRole.HR_ADMIN]: [
     Permission.MANAGE_ALL_PROFILES,
     Permission.VIEW_ORG_STRUCTURE,
     Permission.MANAGE_ATTENDANCE,
     Permission.MANAGE_LEAVES,
   ],
 
-  [UserRole.HR_EMPLOYEE]: [
+  [SystemRole.HR_EMPLOYEE]: [
     Permission.MANAGE_ALL_PROFILES,
     Permission.VIEW_ORG_STRUCTURE,
     Permission.VIEW_APPLICATIONS,
   ],
 
-  [UserRole.PAYROLL_SPECIALIST]: [
+  [SystemRole.PAYROLL_SPECIALIST]: [
     Permission.MANAGE_PAYROLL,
     Permission.VIEW_TEAM_ATTENDANCE,
   ],
-  [UserRole.PAYROLL_MANAGER]: [
+  [SystemRole.PAYROLL_MANAGER]: [
   Permission.MANAGE_PAYROLL,
   Permission.APPROVE_PAYROLL,
   Permission.VIEW_TEAM_ATTENDANCE,
   Permission.VIEW_ORG_STRUCTURE,
 ],
 
-  [UserRole.FINANCE_STAFF]: [
+  [SystemRole.FINANCE_STAFF]: [
     Permission.APPROVE_PAYROLL,
   ],
 
-  [UserRole.LEGAL_POLICY_ADMIN]: [
+  [SystemRole.LEGAL_POLICY_ADMIN]: [
     Permission.MANAGE_PAYROLL, // For tax/legal config
   ],
 
-  [UserRole.RECRUITER]: [
+  [SystemRole.RECRUITER]: [
     Permission.MANAGE_RECRUITMENT,
     Permission.VIEW_APPLICATIONS,
   ],
 
-  [UserRole.DEPARTMENT_HEAD]: [
+  [SystemRole.DEPARTMENT_HEAD]: [
     Permission.VIEW_TEAM_PROFILES,
     Permission.CONDUCT_APPRAISALS,
     Permission.VIEW_TEAM_ATTENDANCE,
     Permission.APPROVE_LEAVES,
   ],
 
-  [UserRole.DEPARTMENT_EMPLOYEE]: [
+  [SystemRole.DEPARTMENT_EMPLOYEE]: [
     Permission.EDIT_OWN_PROFILE,
     Permission.VIEW_ORG_STRUCTURE,
     Permission.VIEW_OWN_APPRAISAL,
@@ -100,7 +101,9 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     Permission.VIEW_OWN_PAYSLIP,
   ],
 
-  [UserRole.JOB_CANDIDATE]: [
+  [SystemRole.JOB_CANDIDATE]: [
     Permission.VIEW_APPLICATIONS, // View own application
   ],
 };
+
+export { SystemRole as UserRole } from '../employee-profile/enums/employee-profile.enums';

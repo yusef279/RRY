@@ -37,6 +37,13 @@ export class EmployeeProfile extends UserProfileBase {
   @Prop({ type: Date })
   contractEndDate?: Date;
 
+  // Banking details
+  @Prop({ type: String })
+  bankName?: string;
+
+  @Prop({ type: String })
+  bankAccountNumber?: string;
+
   
   @Prop({
     type: String,

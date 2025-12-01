@@ -21,15 +21,15 @@ import {
   RaiseDisputeDto,
   ResolveDisputeDto,
 } from './dto/performance.dto';
-import { JwtAuthGuard } from '../auth/authorization/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/authorization/guards/roles.guard';
-import { Permissions } from '../auth/authorization/decorators/roles.decorators';
-import { Permission } from '../auth/authorization/constants/permissions.constant';
-import { AuthUser } from '../auth/authorization/interfaces/auth-user.interface';
+// import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+// import { RolesGuard } from '../auth/guards/roles.guard';
+import { Permissions } from '../auth/decorators/roles.decorators';
+import { Permission } from '../auth/permissions.constant';
+import { AuthUser } from '../auth/auth-user.interface';
 import { Request } from 'express';
 
 @Controller('performance')
-@UseGuards(JwtAuthGuard, RolesGuard)
+//@UseGuards(JwtAuthGuard, RolesGuard)
 export class PerformanceController {
   constructor(private readonly service: PerformanceService) {}
 

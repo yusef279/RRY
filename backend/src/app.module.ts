@@ -17,8 +17,8 @@ import { PayrollExecutionModule } from './payroll-execution/payroll-execution.mo
 
 /* 1. import Auth module */
 import { AuthModule } from './auth';
-import { JwtAuthGuard } from './auth/authorization/guards/jwt-auth.guard';
-import { RolesGuard } from './auth/authorization/guards/roles.guard';
+import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { RolesGuard } from './auth/guards/roles.guard';
 
 @Module({
   imports: [
@@ -50,8 +50,12 @@ import { RolesGuard } from './auth/authorization/guards/roles.guard';
   providers: [
     AppService,
     {
-      provide:  APP_GUARD,
-      useClass: RolesGuard,
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard, // ✅ runs first
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,   // ✅ runs second
     },
   ],
 })

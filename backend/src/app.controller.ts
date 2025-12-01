@@ -1,10 +1,10 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
 import { AppService } from './app.service';
-import { JwtAuthGuard } from './auth/authorization/guards/jwt-auth.guard';
-import { RolesGuard } from './auth/authorization/guards/roles.guard';
-import { Permissions } from './auth/authorization/decorators/roles.decorators';
-import { Public } from './auth/authorization/decorators/roles.decorators';
-import { Permission } from './auth/authorization/constants/permissions.constant';
+import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { RolesGuard } from './auth/guards/roles.guard';
+import { Permissions } from './auth/decorators/roles.decorators';
+import { Public } from './auth/decorators/roles.decorators';
+import { Permission } from './auth/permissions.constant';
 
 @Controller()
 export class AppController {
