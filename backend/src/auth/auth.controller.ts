@@ -6,13 +6,14 @@ import {
   HttpStatus,
   UseGuards,
   Req,
+  Res,
   BadRequestException,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterDto, LoginDto } from './auth.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { Public } from './decorators/roles.decorators';
-import { Request } from 'express';
+import type { Request, Response } from 'express';
 import { AuthUser } from './auth-user.interface';
 
 @Controller('auth')
@@ -23,33 +24,63 @@ export class AuthController {
   @Public()
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
-  async register(@Body() dto: RegisterDto) {
-    return this.auth.register(dto);
+  async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) res: Response) {
+    const result = await this.auth.register(dto);
+    
+    // Set httpOnly cookie with token
+    res.cookie('access_token', result.access_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
+    return result;
   }
 
   /* ----------  LOGIN  ---------- */
   @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  async login(@Body() dto: LoginDto) {
-    return this.auth.login(dto);
+  async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
+    const result = await this.auth.login(dto);
+    
+    // Set httpOnly cookie with token
+    res.cookie('access_token', result.access_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
+    return result;
   }
 
   /* ----------  LOGOUT  ---------- */
   @Post('logout')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
-  async logout(@Req() req: Request & { user: AuthUser }) {
+  async logout(@Req() req: Request & { user: AuthUser }, @Res({ passthrough: true }) res: Response) {
+    // Extract token from cookie or Authorization header
+    const token = req.cookies?.access_token || 
+      (req.headers.authorization?.startsWith('Bearer ') 
+        ? req.headers.authorization.substring(7) 
+        : null);
 
-    // ✅ Extract token from Authorization header
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!token) {
       throw new BadRequestException('Authorization token is missing');
     }
 
-    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
     const userId = req.user.userId;
+    const result = await this.auth.logout(userId, token);
 
-    return this.auth.logout(userId, token);
+    // Clear the cookie
+    res.clearCookie('access_token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+    });
+
+    return result;
   }
 }

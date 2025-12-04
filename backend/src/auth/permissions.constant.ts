@@ -36,7 +36,7 @@ import { SystemRole } from '../employee-profile/enums/employee-profile.enums';
 
 export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
   [SystemRole.SYSTEM_ADMIN]:
-Object.values(Permission), 
+    Object.values(Permission),
 
   [SystemRole.HR_MANAGER]: [
     Permission.MANAGE_ALL_PROFILES,
@@ -64,13 +64,12 @@ Object.values(Permission),
   [SystemRole.PAYROLL_SPECIALIST]: [
     Permission.MANAGE_PAYROLL,
     Permission.VIEW_TEAM_ATTENDANCE,
+    Permission.APPROVE_PAYROLL,
+    Permission.VIEW_ORG_STRUCTURE,
   ],
-  [SystemRole.PAYROLL_MANAGER]: [
-  Permission.MANAGE_PAYROLL,
-  Permission.APPROVE_PAYROLL,
-  Permission.VIEW_TEAM_ATTENDANCE,
-  Permission.VIEW_ORG_STRUCTURE,
-],
+
+  [SystemRole.PAYROLL_MANAGER]: [],   // ← insert this line
+
 
   [SystemRole.FINANCE_STAFF]: [
     Permission.APPROVE_PAYROLL,

@@ -1,11 +1,15 @@
-import { ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import { ExecutionContext, Injectable, UnauthorizedException, Optional, Inject } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
 import { IS_PUBLIC_KEY } from '../decorators/roles.decorators';
+import { AuthService } from '../auth.service';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
-  constructor(private reflector: Reflector) {
+  constructor(
+    private reflector: Reflector,
+    @Optional() @Inject(AuthService) private authService?: AuthService,
+  ) {
     super();
   }
 
@@ -17,6 +21,21 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     
     if (isPublic) {
       return true;
+    }
+    
+    // Check if token is blacklisted (only if AuthService is available)
+    if (this.authService) {
+      const request = context.switchToHttp().getRequest();
+      
+      // Extract token from cookie or Authorization header
+      const token = request.cookies?.access_token || 
+        (request.headers.authorization?.startsWith('Bearer ') 
+          ? request.headers.authorization.substring(7) 
+          : null);
+      
+      if (token && this.authService.isTokenBlacklisted(token)) {
+        throw new UnauthorizedException('Token has been revoked');
+      }
     }
     
     return super.canActivate(context);
