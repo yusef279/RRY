@@ -6,13 +6,13 @@ async function bootstrap() {
 
   // ★ allow frontend origin + credentials (cookies)
   app.enableCors({
-    origin: 'http://localhost:3001',
+    origin: 'http://localhost:3000',
     credentials: true,
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
-  await app.listen(3000);
-  console.log('Nest running on http://localhost:3000  🚀');
+  await app.listen(5000);
+  console.log('Nest running on http://localhost:5000  🚀');
 }
 bootstrap();
