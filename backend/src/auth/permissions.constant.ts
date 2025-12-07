@@ -68,9 +68,6 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     Permission.VIEW_ORG_STRUCTURE,
   ],
 
-  [SystemRole.PAYROLL_MANAGER]: [],   // ← insert this line
-
-
   [SystemRole.FINANCE_STAFF]: [
     Permission.APPROVE_PAYROLL,
   ],
