@@ -1,85 +1,141 @@
-'use client';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import axios from 'axios';
-import { toast } from 'sonner';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
+// src/app/login/page.tsx
+"use client";
 
-const schema = z.object({
-  email: z.string().email(),
-  password: z.string().min(6),
-});
-type Form = z.infer<typeof schema>;
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { api } from "@/lib/api";
+
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+
+type LoginForm = {
+  email: string;
+  password: string;
+};
 
 export default function LoginPage() {
   const router = useRouter();
+  const [form, setForm] = useState<LoginForm>({
+    email: "",
+    password: "",
+  });
   const [loading, setLoading] = useState(false);
-  const { register, handleSubmit, formState: { errors } } = useForm<Form>({ resolver: zodResolver(schema) });
+  const [error, setError] = useState<string | null>(null);
 
-  const onSubmit = async (data: Form) => {
+  const handleChange =
+    (field: keyof LoginForm) =>
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setForm((prev) => ({ ...prev, [field]: e.target.value }));
+    };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
     setLoading(true);
+
     try {
-      await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/auth/login`, data, { withCredentials: true });
-      toast.success('Welcome back!');
-      router.push('/dashboard');
-    } catch (e: any) {
-      toast.error(e.response?.data?.message || 'Sign-in failed');
+      const res = await api.post("/auth/login", {
+        email: form.email,
+        password: form.password,
+      });
+
+      // 🔑 Adjust this block to match your backend response shape
+      const data = res.data;
+      const token: string | undefined = data?.access_token;
+      const user = data?.user || {};
+      const roles: string[] =
+        user.roles ||
+        data?.roles ||
+        (user.role ? [user.role] : data?.role ? [data.role] : []);
+      const email: string = user.email || data?.email || form.email;
+      const name: string | undefined =
+        user.fullName || user.name || `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim();
+
+      if (token) {
+        localStorage.setItem("access_token", token);
+        api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+      }
+
+      if (roles && roles.length) {
+        localStorage.setItem("systemRoles", JSON.stringify(roles));
+      } else {
+        localStorage.removeItem("systemRoles");
+      }
+
+      localStorage.setItem("userEmail", email);
+      if (name && name.length > 0) {
+        localStorage.setItem("userName", name);
+      } else {
+        localStorage.removeItem("userName");
+      }
+
+      router.push("/profile");
+    } catch (err: any) {
+      const msg = err?.response?.data?.message;
+      if (Array.isArray(msg)) {
+        setError(msg.join(" • "));
+      } else if (typeof msg === "string") {
+        setError(msg);
+      } else {
+        setError("Login failed. Please check your credentials.");
+      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <main className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
-      <div className="w-full max-w-md px-4">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold tracking-tight">Welcome back</h1>
-          <p className="text-sm text-muted-foreground">Sign in to continue</p>
-        </div>
+    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+      <Card className="w-full max-w-md shadow-lg">
+        <CardHeader>
+          <CardTitle className="text-2xl font-semibold">Sign in</CardTitle>
+          <CardDescription>
+            Log in to access your HR account.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form className="space-y-4" onSubmit={handleSubmit}>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                required
+                value={form.email}
+                onChange={handleChange("email")}
+                placeholder="you@example.com"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                required
+                value={form.password}
+                onChange={handleChange("password")}
+                placeholder="Your password"
+              />
+            </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-          <div>
-            <Input
-              type="email"
-              placeholder="Email"
-              autoComplete="email"
-              {...register('email')}
-              className="rounded-xl"
-            />
-            {errors.email && <p className="text-xs text-destructive mt-1">{errors.email.message}</p>}
-          </div>
+            {error && (
+              <p className="text-sm font-medium text-red-600">{error}</p>
+            )}
 
-          <div>
-            <Input
-              type="password"
-              placeholder="Password"
-              autoComplete="current-password"
-              {...register('password')}
-              className="rounded-xl"
-            />
-            {errors.password && <p className="text-xs text-destructive mt-1">{errors.password.message}</p>}
-          </div>
-
-          <Button
-            type="submit"
-            className="w-full h-12 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white shadow-lg hover:shadow-indigo-500/40 transition-all"
-            disabled={loading}
-          >
-            {loading ? 'Signing in…' : 'Sign in'}
-          </Button>
-        </form>
-
-        <p className="text-center text-xs text-muted-foreground mt-6">
-          Don’t have an account?{' '}
-          <a href="/register" className="underline hover:text-primary">
-            Create one
-          </a>
-        </p>
-      </div>
-    </main>
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? "Signing in..." : "Sign in"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
