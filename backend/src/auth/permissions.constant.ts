@@ -56,6 +56,7 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
   ],
 
   [SystemRole.HR_EMPLOYEE]: [
+    Permission.EDIT_OWN_PROFILE,
     Permission.MANAGE_ALL_PROFILES,
     Permission.VIEW_ORG_STRUCTURE,
     Permission.VIEW_APPLICATIONS,
@@ -65,6 +66,13 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     Permission.MANAGE_PAYROLL,
     Permission.VIEW_TEAM_ATTENDANCE,
     Permission.APPROVE_PAYROLL,
+    Permission.VIEW_ORG_STRUCTURE,
+  ],
+
+  [SystemRole.PAYROLL_MANAGER]: [
+    Permission.MANAGE_PAYROLL,
+    Permission.APPROVE_PAYROLL,
+    Permission.VIEW_TEAM_ATTENDANCE,
     Permission.VIEW_ORG_STRUCTURE,
   ],
 

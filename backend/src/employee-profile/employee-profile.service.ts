@@ -198,8 +198,7 @@ export class EmployeeProfileService {
     const changeRequest = await this.changeRequestModel.create({
       requestId,
       employeeProfileId: employee._id,
-      requestDescription: dto.requestDescription,
-      reason: dto.reason,
+      requestDescription: dto.requestDescription,  // ✅ Correct field
       status: ProfileChangeStatus.PENDING,
       submittedAt: new Date(),
     });
@@ -399,7 +398,9 @@ export class EmployeeProfileService {
       await this.changeRequestModel.create({
         requestId: `EPCR-TERMINATE-${Date.now()}`,
         employeeProfileId: new Types.ObjectId(employeeProfileId),
-        requestDescription: 'Profile deactivated / terminated',
+        fieldName: 'Employment Status',
+        currentValue: 'ACTIVE',
+        requestedValue: 'TERMINATED',
         reason,
         status: ProfileChangeStatus.APPROVED,
         submittedAt: new Date(),
@@ -454,5 +455,26 @@ export class EmployeeProfileService {
     }
 
     return accessProfile;
+  }
+
+  // ---------- Profile Picture Upload ----------
+
+  async updateProfilePicture(employeeProfileId: string, fileUrl: string) {
+    if (!Types.ObjectId.isValid(employeeProfileId)) {
+      throw new BadRequestException('Invalid employee profile id');
+    }
+
+    const employee = await this.employeeProfileModel
+      .findById(employeeProfileId)
+      .exec();
+
+    if (!employee) {
+      throw new NotFoundException('Employee profile not found');
+    }
+
+    employee.profilePictureUrl = fileUrl;
+    await employee.save();
+
+    return employee;
   }
 }

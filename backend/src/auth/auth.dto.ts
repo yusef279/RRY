@@ -19,21 +19,22 @@ export class RegisterDto {
   @IsNotEmpty({ message: 'Last name is required' })
   lastName: string;
 
+  // Optional fields - admin will set these later
+  @IsOptional()
   @IsString()
-  @IsNotEmpty({ message: 'National ID is required' })
-  nationalId: string;
+  nationalId?: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty({ message: 'Employee number is required' })
-  employeeNumber: string;
+  employeeNumber?: string;
 
+  @IsOptional()
   @IsDateString()
-  @IsNotEmpty({ message: 'Date of hire is required' })
-  dateOfHire: string; // Format: YYYY-MM-DD
+  dateOfHire?: string; // Format: YYYY-MM-DD
 
+  @IsOptional()
   @IsEnum(SystemRole, { message: 'Invalid role. Must be one of: ' + Object.values(SystemRole).join(', ') })
-  @IsNotEmpty({ message: 'Role is required' })
-  role: SystemRole;
+  role?: SystemRole;
 
   @IsOptional()
   @IsString()

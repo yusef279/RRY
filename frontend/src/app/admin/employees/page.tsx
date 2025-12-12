@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/layout/app-shell";
 import { api } from "@/lib/api";
 import {
@@ -23,6 +24,8 @@ import {
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
+import { Download, Eye } from "lucide-react";
+import { exportEmployees } from "@/lib/export";
 
 type EmployeeStatus =
   | "ACTIVE"
@@ -57,6 +60,7 @@ const STATUS_OPTIONS: (EmployeeStatus | "ALL")[] = [
 ];
 
 export default function AdminEmployeesPage() {
+  const router = useRouter();
   const [employees, setEmployees] = useState<EmployeeListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -67,9 +71,11 @@ export default function AdminEmployeesPage() {
   useEffect(() => {
     const loadEmployees = async () => {
       try {
-        // 🔁 Adjust this endpoint to match your backend:
-        // e.g. GET /employee-profile/admin, or /employee-profile
-        const res = await api.get("/employee-profile");
+        // GET /employee-profile/admin/search?q=
+        // Empty query returns all employees
+        const res = await api.get("/employee-profile/admin/search", {
+          params: { q: "" },
+        });
         setEmployees(res.data || []);
       } catch (error: any) {
         console.error(error);
@@ -105,6 +111,15 @@ export default function AdminEmployeesPage() {
   const resetFilters = () => {
     setSearch("");
     setStatusFilter("ALL");
+  };
+
+  const handleExport = (format: 'csv' | 'excel') => {
+    if (filteredEmployees.length === 0) {
+      toast.error("No data to export");
+      return;
+    }
+    exportEmployees(filteredEmployees, format);
+    toast.success(`Exported ${filteredEmployees.length} employees to ${format.toUpperCase()}`);
   };
 
   return (
@@ -145,6 +160,14 @@ export default function AdminEmployeesPage() {
               <Button variant="outline" onClick={resetFilters}>
                 Reset
               </Button>
+              <Button
+                variant="outline"
+                onClick={() => handleExport('csv')}
+                disabled={loading || filteredEmployees.length === 0}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Export CSV
+              </Button>
             </div>
           </div>
         </CardHeader>
@@ -168,6 +191,7 @@ export default function AdminEmployeesPage() {
                     <TableHead>Status</TableHead>
                     <TableHead>System roles</TableHead>
                     <TableHead>Work email</TableHead>
+                    <TableHead className="w-[100px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -212,6 +236,16 @@ export default function AdminEmployeesPage() {
                         )}
                       </TableCell>
                       <TableCell>{emp.workEmail || "—"}</TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => router.push(`/admin/employees/${emp._id}`)}
+                        >
+                          <Eye className="h-4 w-4 mr-1" />
+                          View
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

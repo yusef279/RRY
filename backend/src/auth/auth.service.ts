@@ -32,32 +32,31 @@ export class AuthService {
   async register(dto: RegisterDto): Promise<any> {
     const email: string = dto.email;
     const password: string = dto.password;
-    const role: SystemRole = dto.role;
     const firstName: string = dto.firstName;
     const lastName: string = dto.lastName;
-    const nationalId: string = dto.nationalId;
-    const employeeNumber: string = dto.employeeNumber;
-    const dateOfHire: string = dto.dateOfHire;
+
+    // Optional fields - will be set by admin later
+    const role: SystemRole = dto.role || SystemRole.DEPARTMENT_EMPLOYEE; // Default role
+    const nationalId: string = dto.nationalId || `TEMP-${Date.now()}`; // Temporary ID
+    const employeeNumber: string = dto.employeeNumber || `EMP-${Date.now()}`; // Auto-generate
+    const dateOfHire: string = dto.dateOfHire || new Date().toISOString().split('T')[0]; // Today
     const departmentId: string | undefined = dto.departmentId;
 
-const missingFields = [
-  !email && 'email',
-  !password && 'password',
-  !firstName && 'firstName',
-  !lastName && 'lastName',
-  !nationalId && 'nationalId',
-  !employeeNumber && 'employeeNumber',
-  !dateOfHire && 'dateOfHire',
-  !role && 'role',
-].filter(Boolean) as string[];
+    // Validate required fields
+    const missingFields = [
+      !email && 'email',
+      !password && 'password',
+      !firstName && 'firstName',
+      !lastName && 'lastName',
+    ].filter(Boolean) as string[];
 
-if (missingFields.length > 0) {
-  throw new BadRequestException(
-    `Missing required fields: ${missingFields.join(', ')}`,
-  );
-}
+    if (missingFields.length > 0) {
+      throw new BadRequestException(
+        `Missing required fields: ${missingFields.join(', ')}`,
+      );
+    }
 
-    // ✅ Validate field formats before DB queries
+    // Validate field formats
     if (!email.includes('@') || email.length < 5) {
       throw new BadRequestException('Invalid email format');
     }
@@ -66,23 +65,19 @@ if (missingFields.length > 0) {
       throw new BadRequestException('Password must be at least 6 characters');
     }
 
-    if (nationalId.length < 10) {
-      throw new BadRequestException('Invalid national ID format');
-    }
-
-
-    // ✅ Now check uniqueness (DB operations)
+    // Check email uniqueness
     if (await this.empModel.findOne({ workEmail: email }))
       throw new ConflictException('Email already registered');
-    
-    if (await this.empModel.findOne({ nationalId }))
+
+    // Check national ID uniqueness only if provided by user
+    if (dto.nationalId && await this.empModel.findOne({ nationalId: dto.nationalId }))
       throw new ConflictException('National ID already registered');
-    
-    if (await this.empModel.findOne({ employeeNumber }))
+
+    // Check employee number uniqueness only if provided by user
+    if (dto.employeeNumber && await this.empModel.findOne({ employeeNumber: dto.employeeNumber }))
       throw new ConflictException('Employee number already exists');
 
-
-    // ✅ Validate department if provided
+    // Validate department if provided
     let deptOid: string | undefined;
     if (departmentId) {
       const dept = await this.deptModel.findOne({ code: departmentId }).exec();
@@ -91,7 +86,7 @@ if (missingFields.length > 0) {
     }
 
     try {
-      // ✅ Only create employee after ALL validations pass
+      // Create employee with minimal required data
       const hashed = await bcrypt.hash(password, 12);
       const user = await this.empModel.create({
         workEmail: email,
@@ -104,7 +99,7 @@ if (missingFields.length > 0) {
         primaryDepartmentId: deptOid,
       });
 
-      // ✅ Create role doc with real employeeProfileId
+      // Create role doc with default role
       const roleDoc = await this.roleModel.create({
         employeeProfileId: user._id,
         roles: [role],
@@ -112,13 +107,12 @@ if (missingFields.length > 0) {
         isActive: true,
       });
 
-      // ✅ Link role to employee
+      // Link role to employee
       user.accessProfileId = roleDoc._id;
       await user.save();
 
       return this.buildTokens(user);
     } catch (error) {
-      // ✅ If DB creation fails, throw descriptive error
       console.error('❌ Registration failed:', error.message);
       throw new BadRequestException(
         `Registration failed: ${error.message}`,
@@ -215,6 +209,10 @@ if (missingFields.length > 0) {
 
       if (!roleDoc || !roleDoc.roles?.length) throw new Error('Role not found for user');
 
+      console.log('🔐 Building token for user:', emp.workEmail);
+      console.log('📋 Role document found:', JSON.stringify(roleDoc, null, 2));
+      console.log('🎭 User role:', roleDoc.roles[0]);
+
       const payload: AuthUser = {
         userId: emp._id.toString(),
         email: emp.workEmail,
@@ -224,7 +222,7 @@ if (missingFields.length > 0) {
       };
 
       const accessToken = this.jwt.sign(payload);
-      
+
       return { access_token: accessToken, user: payload };
     } catch (error) {
       console.error('❌ Token generation error:', error.message);

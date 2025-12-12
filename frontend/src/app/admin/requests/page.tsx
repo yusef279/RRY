@@ -37,16 +37,19 @@ type ChangeRequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELED";
 
 type AdminChangeRequest = {
   _id: string;
-  employeeId: string;
-  employeeNumber?: string;
-  employeeName?: string;
-  fieldKey: string;
-  oldValue: string | null;
-  newValue: string | null;
+  requestId: string;
+  employeeProfileId: string;
+
+  requestDescription: string;
+  reason?: string;
+
   status: ChangeRequestStatus;
-  submittedAt: string;
-  decidedAt?: string;
-  decidedByName?: string;
+
+  submittedAt?: string;
+  processedAt?: string;
+
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 const STATUS_FILTERS: (ChangeRequestStatus | "ALL")[] = [
@@ -56,6 +59,30 @@ const STATUS_FILTERS: (ChangeRequestStatus | "ALL")[] = [
   "REJECTED",
   "CANCELED",
 ];
+
+// Parse the big text field into separate parts
+function parseRequestDescription(text: string) {
+  if (!text) {
+    return {
+      fieldName: "—",
+      currentValue: "—",
+      requestedValue: "—",
+      reason: "—",
+    };
+  }
+
+  const lines = text.split("\n").map((l) => l.trim());
+  const get = (label: string) =>
+    lines.find((line) => line.startsWith(label))?.replace(label, "").trim() ||
+    "—";
+
+  return {
+    fieldName: get("Field:"),
+    currentValue: get("From:"),
+    requestedValue: get("To:"),
+    reason: get("Reason:"),
+  };
+}
 
 export default function AdminChangeRequestsPage() {
   const [requests, setRequests] = useState<AdminChangeRequest[]>([]);
@@ -68,11 +95,14 @@ export default function AdminChangeRequestsPage() {
   const [decision, setDecision] = useState<"APPROVED" | "REJECTED">("APPROVED");
   const [comment, setComment] = useState("");
 
+  // Load pending requests from backend
   useEffect(() => {
     const loadRequests = async () => {
       try {
-        // 🔁 Adjust to your admin endpoint, e.g. /employee-profile/change-requests
-        const res = await api.get("/employee-profile/change-requests");
+        // GET /employee-profile/admin/change-requests/pending
+        const res = await api.get<AdminChangeRequest[]>(
+          "/employee-profile/admin/change-requests/pending",
+        );
         setRequests(res.data || []);
       } catch (error: any) {
         console.error(error);
@@ -93,17 +123,20 @@ export default function AdminChangeRequestsPage() {
       const matchesStatus =
         statusFilter === "ALL" || req.status === statusFilter;
 
-      const text = (
-        (req.employeeName ?? "") +
-        " " +
-        (req.employeeNumber ?? "") +
-        " " +
-        req.fieldKey +
-        " " +
-        (req.oldValue ?? "") +
-        " " +
-        (req.newValue ?? "")
-      ).toLowerCase();
+      const parsed = parseRequestDescription(req.requestDescription);
+
+      const text =
+        [
+          req.requestId,
+          req.employeeProfileId,
+          parsed.fieldName,
+          parsed.currentValue,
+          parsed.requestedValue,
+          parsed.reason,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase() || "";
 
       const matchesSearch =
         !search || text.includes(search.toLowerCase().trim());
@@ -120,11 +153,12 @@ export default function AdminChangeRequestsPage() {
 
   const handleReviewSubmit = async () => {
     if (!selected) return;
+
     try {
-      // 🔁 Adjust to match your backend review endpoint & DTO
-      // Example for PATCH /employee-profile/change-requests/:id/review
+      // ✅ backend expects requestId here, not _id
+      // PATCH /employee-profile/admin/change-requests/:requestId/review
       await api.patch(
-        `/employee-profile/change-requests/${selected._id}/review`,
+        `/employee-profile/admin/change-requests/${selected.requestId}/review`,
         {
           decision,
           comment: comment || undefined,
@@ -135,15 +169,10 @@ export default function AdminChangeRequestsPage() {
         `Request ${decision === "APPROVED" ? "approved" : "rejected"} successfully.`,
       );
 
+      // Backend returns only pending requests; once processed,
+      // we can safely remove it from the local list.
       setRequests((prev) =>
-        prev.map((r) =>
-          r._id === selected._id
-            ? {
-                ...r,
-                status: decision,
-              }
-            : r,
-        ),
+        prev.filter((r) => r.requestId !== selected.requestId),
       );
       setSelected(null);
     } catch (error: any) {
@@ -185,7 +214,7 @@ export default function AdminChangeRequestsPage() {
           </div>
           <div className="flex flex-col gap-2 md:flex-row md:items-center">
             <Input
-              placeholder="Search by employee, field, or value"
+              placeholder="Search by field or value"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full md:w-72"
@@ -232,65 +261,69 @@ export default function AdminChangeRequestsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.map((req) => (
-                    <TableRow key={req._id}>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="font-medium">
-                            {req.employeeName || "Unknown employee"}
-                          </span>
-                          {req.employeeNumber && (
+                  {filtered.map((req) => {
+                    const parsed = parseRequestDescription(
+                      req.requestDescription,
+                    );
+
+                    return (
+                      <TableRow key={req._id}>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="font-medium">
+                              Unknown employee
+                            </span>
                             <span className="text-xs text-muted-foreground">
-                              #{req.employeeNumber}
+                              #{req.employeeProfileId}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {parsed.fieldName}
+                        </TableCell>
+                        <TableCell className="max-w-[200px] text-xs text-muted-foreground">
+                          {parsed.currentValue}
+                        </TableCell>
+                        <TableCell className="max-w-[200px] text-xs">
+                          {parsed.requestedValue}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              req.status === "PENDING"
+                                ? "secondary"
+                                : req.status === "APPROVED"
+                                ? "default"
+                                : "outline"
+                            }
+                            className="uppercase"
+                          >
+                            {statusLabel(req.status)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {req.submittedAt
+                            ? new Date(req.submittedAt).toLocaleString()
+                            : "—"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {req.status === "PENDING" ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openReview(req)}
+                            >
+                              Review
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              Already {statusLabel(req.status).toLowerCase()}
                             </span>
                           )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {req.fieldKey}
-                      </TableCell>
-                      <TableCell className="max-w-[200px] text-xs text-muted-foreground">
-                        {req.oldValue ?? "—"}
-                      </TableCell>
-                      <TableCell className="max-w-[200px] text-xs">
-                        {req.newValue ?? "—"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            req.status === "PENDING"
-                              ? "secondary"
-                              : req.status === "APPROVED"
-                              ? "default"
-                              : "outline"
-                          }
-                          className="uppercase"
-                        >
-                          {statusLabel(req.status)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {req.submittedAt
-                          ? new Date(req.submittedAt).toLocaleString()
-                          : "—"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {req.status === "PENDING" ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => openReview(req)}
-                          >
-                            Review
-                          </Button>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">
-                            Already {statusLabel(req.status).toLowerCase()}
-                          </span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </ScrollArea>
@@ -298,7 +331,10 @@ export default function AdminChangeRequestsPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
+      <Dialog
+        open={!!selected}
+        onOpenChange={(open) => !open && setSelected(null)}
+      >
         {selected && (
           <DialogContent>
             <DialogHeader>
@@ -306,33 +342,41 @@ export default function AdminChangeRequestsPage() {
             </DialogHeader>
             <div className="space-y-4">
               <div className="text-sm">
-                <p className="font-medium">
-                  {selected.employeeName || "Employee"}
-                </p>
-                {selected.employeeNumber && (
-                  <p className="text-xs text-muted-foreground">
-                    #{selected.employeeNumber}
-                  </p>
-                )}
-              </div>
-              <div className="space-y-1 text-sm">
-                <p>
-                  <span className="font-medium">Field:</span>{" "}
-                  <span className="font-mono text-xs">
-                    {selected.fieldKey}
-                  </span>
-                </p>
-                <p>
-                  <span className="font-medium">From:</span>{" "}
-                  <span className="text-muted-foreground">
-                    {selected.oldValue ?? "—"}
-                  </span>
-                </p>
-                <p>
-                  <span className="font-medium">To:</span>{" "}
-                  {selected.newValue ?? "—"}
+                <p className="font-medium">Unknown employee</p>
+                <p className="text-xs text-muted-foreground">
+                  #{selected.employeeProfileId}
                 </p>
               </div>
+
+              {(() => {
+                const parsed = parseRequestDescription(
+                  selected.requestDescription,
+                );
+                return (
+                  <div className="space-y-1 text-sm">
+                    <p>
+                      <span className="font-medium">Field:</span>{" "}
+                      <span className="font-mono text-xs">
+                        {parsed.fieldName}
+                      </span>
+                    </p>
+                    <p>
+                      <span className="font-medium">From:</span>{" "}
+                      <span className="text-muted-foreground">
+                        {parsed.currentValue}
+                      </span>
+                    </p>
+                    <p>
+                      <span className="font-medium">To:</span>{" "}
+                      {parsed.requestedValue}
+                    </p>
+                    <p>
+                      <span className="font-medium">Reason:</span>{" "}
+                      {parsed.reason}
+                    </p>
+                  </div>
+                );
+              })()}
 
               <div className="space-y-2">
                 <p className="text-sm font-medium">Decision</p>

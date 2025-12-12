@@ -14,68 +14,45 @@ import {
 } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
-
-type EmployeeProfile = {
-  _id?: string;
-  firstName?: string;
-  lastName?: string;
-  employeeNumber?: string;
-  status?: string;
-  departmentName?: string;
-  positionTitle?: string;
-  dateOfHire?: string;
-  workEmail?: string;
-  personalEmail?: string;
-  phone?: string;
-  address?: string;
-  bio?: string;
-};
+import { getCurrentUser } from "@/lib/auth";
+import type { EmployeeProfile } from "@/types/employee";
 
 export default function ProfilePage() {
   const router = useRouter();
 
   const [profile, setProfile] = useState<EmployeeProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
 
-  const [edit, setEdit] = useState({
-    phone: "",
-    address: "",
-    bio: "",
-  });
-
-    useEffect(() => {
+  useEffect(() => {
     const loadProfile = async () => {
+      const user = getCurrentUser();
+      if (!user || !user.employeeId) {
+        router.push("/login");
+        return;
+      }
+
       try {
-        const res = await api.get("/employee-profile/self");
+        // GET /employee-profile/:id
+        const res = await api.get(`/employee-profile/${user.employeeId}`);
         const data: EmployeeProfile = res.data;
         setProfile(data);
-        setEdit({
-          phone: data.phone ?? "",
-          address: data.address ?? "",
-          bio: data.bio ?? "",
-        });
       } catch (error: any) {
         const status = error?.response?.status;
         const msg = error?.response?.data?.message;
 
         if (status === 401) {
-          // Not logged in → go to login
           router.push("/login");
           return;
         }
 
-        // Treat "no profile / invalid id" as empty state instead of error toast
+        // Treat "Invalid employee profile id" as "no profile exists"
         if (
-          status === 404 ||
-          (status === 400 &&
-            (msg === "Invalid employee profile id" ||
-              (Array.isArray(msg) && msg.includes("Invalid employee profile id"))))
+          status === 400 &&
+          (msg === "Invalid employee profile id" ||
+            (Array.isArray(msg) && msg.includes("Invalid employee profile id")))
         ) {
           setProfile(null);
         } else {
@@ -90,42 +67,6 @@ export default function ProfilePage() {
     loadProfile();
   }, [router]);
 
-
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!profile?._id) {
-      toast.error("No employee profile to update.");
-      return;
-    }
-
-    setSaving(true);
-    try {
-      // adjust body if your update DTO is different
-      const res = await api.patch("/employee-profile/self", {
-        phone: edit.phone,
-        address: edit.address,
-        bio: edit.bio,
-      });
-
-      const updated: EmployeeProfile = res.data;
-      setProfile(updated);
-      setEdit({
-        phone: updated.phone ?? "",
-        address: updated.address ?? "",
-        bio: updated.bio ?? "",
-      });
-
-      toast.success("Profile updated successfully.");
-    } catch (error: any) {
-      console.error(error);
-      toast.error(
-        error?.response?.data?.message || "Could not update profile."
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const fullName =
     (profile?.firstName || "") + " " + (profile?.lastName || "");
 
@@ -135,6 +76,17 @@ export default function ProfilePage() {
   const formattedHireDate = profile?.dateOfHire
     ? new Date(profile.dateOfHire).toLocaleDateString()
     : "Not set";
+
+  // Extract department and position names
+  const departmentName =
+    typeof profile?.primaryDepartmentId === "object"
+      ? profile.primaryDepartmentId.name
+      : profile?.department?.name || "Not set";
+
+  const positionName =
+    typeof profile?.primaryPositionId === "object"
+      ? profile.primaryPositionId.name
+      : profile?.position?.name || "Not set";
 
   return (
     <AppShell title="My profile">
@@ -173,11 +125,11 @@ export default function ProfilePage() {
               <div className="space-y-1 text-sm">
                 <p>
                   <span className="font-medium">Position: </span>
-                  {profile.positionTitle || "Not set"}
+                  {positionName}
                 </p>
                 <p>
                   <span className="font-medium">Department: </span>
-                  {profile.departmentName || "Not set"}
+                  {departmentName}
                 </p>
                 <p>
                   <span className="font-medium">Date of hire: </span>
@@ -199,82 +151,93 @@ export default function ProfilePage() {
               <div className="space-y-1 text-sm">
                 <p className="font-medium">Work email</p>
                 <p className="text-sm text-muted-foreground">
-                  {profile.workEmail || profile.personalEmail || "Not set"}
+                  {profile.workEmail || "Not set"}
                 </p>
               </div>
 
-              {profile.bio && (
+              {profile.biography && (
                 <div className="space-y-1 text-sm">
                   <p className="font-medium">Bio</p>
                   <p className="text-sm text-muted-foreground whitespace-pre-line">
-                    {profile.bio}
+                    {profile.biography}
                   </p>
                 </div>
               )}
             </CardContent>
           </Card>
 
-          {/* RIGHT: editable details */}
+          {/* RIGHT: read-only details */}
           <Card>
             <CardHeader>
               <CardTitle>Contact & personal details</CardTitle>
               <CardDescription>
-                View and update your contact information. Changes may require HR
-                approval depending on system rules.
+                Your contact information is managed by HR. To request changes, please
+                use the "Change Requests" page.
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <form className="space-y-4" onSubmit={handleSave}>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">Phone number</Label>
-                    <Input
-                      id="phone"
-                      value={edit.phone}
-                      onChange={(e) =>
-                        setEdit((prev) => ({
-                          ...prev,
-                          phone: e.target.value,
-                        }))
-                      }
-                      placeholder="+20..."
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="address">Address</Label>
-                    <Input
-                      id="address"
-                      value={edit.address}
-                      onChange={(e) =>
-                        setEdit((prev) => ({
-                          ...prev,
-                          address: e.target.value,
-                        }))
-                      }
-                      placeholder="City, Street, Building..."
-                    />
-                  </div>
+            <CardContent className="space-y-6">
+              <div className="grid gap-6 md:grid-cols-2">
+                <div className="space-y-1">
+                  <Label className="text-muted-foreground">Personal email</Label>
+                  <p className="text-sm">
+                    {profile.personalEmail || "Not set"}
+                  </p>
                 </div>
+                <div className="space-y-1">
+                  <Label className="text-muted-foreground">Mobile phone</Label>
+                  <p className="text-sm">
+                    {profile.mobilePhone || "Not set"}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-muted-foreground">Home phone</Label>
+                  <p className="text-sm">
+                    {profile.homePhone || "Not set"}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-muted-foreground">Date of Birth</Label>
+                  <p className="text-sm">
+                    {profile.dateOfBirth
+                      ? new Date(profile.dateOfBirth).toLocaleDateString()
+                      : "Not set"}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-muted-foreground">National ID</Label>
+                  <p className="text-sm">
+                    {profile.nationalId || "Not set"}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-muted-foreground">Marital Status</Label>
+                  <p className="text-sm">
+                    {profile.maritalStatus || "Not set"}
+                  </p>
+                </div>
+              </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="bio">Bio / Notes</Label>
-                  <Textarea
-                    id="bio"
-                    rows={4}
-                    value={edit.bio}
-                    onChange={(e) =>
-                      setEdit((prev) => ({ ...prev, bio: e.target.value }))
-                    }
-                    placeholder="Add a short summary about yourself, your responsibilities, or anything HR should know."
-                  />
-                </div>
+              <div className="space-y-1">
+                <Label className="text-muted-foreground">Address</Label>
+                <p className="text-sm">
+                  {profile.address?.streetAddress && (
+                    <>{profile.address.streetAddress}<br /></>
+                  )}
+                  {profile.address?.city && (
+                    <>{profile.address.city}<br /></>
+                  )}
+                  {profile.address?.country || "Not set"}
+                </p>
+              </div>
 
-                <div className="flex justify-end">
-                  <Button type="submit" disabled={saving}>
-                    {saving ? "Saving..." : "Save changes"}
-                  </Button>
-                </div>
-              </form>
+              <div className="flex justify-end gap-3">
+                <Button
+                  variant="default"
+                  onClick={() => router.push("/profile/requests")}
+                >
+                  Request Profile Changes
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>

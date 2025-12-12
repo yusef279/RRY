@@ -1,0 +1,327 @@
+{
+  "client": "Thunder Client",
+  "collectionName": "Employee Profile API",
+  "dateExported": "2025-12-10T00:00:00.000Z",
+  "version": "1.1",
+  "folders": [
+    {
+      "_id": "auth-folder",
+      "name": "Authentication",
+      "containerId": "",
+      "created": "2025-12-10T00:00:00.000Z",
+      "sortNum": 10000
+    },
+    {
+      "_id": "self-service-folder",
+      "name": "Self-Service",
+      "containerId": "",
+      "created": "2025-12-10T00:00:00.000Z",
+      "sortNum": 20000
+    },
+    {
+      "_id": "manager-folder",
+      "name": "Manager",
+      "containerId": "",
+      "created": "2025-12-10T00:00:00.000Z",
+      "sortNum": 30000
+    },
+    {
+      "_id": "admin-folder",
+      "name": "Admin/HR",
+      "containerId": "",
+      "created": "2025-12-10T00:00:00.000Z",
+      "sortNum": 40000
+    }
+  ],
+  "requests": [
+    {
+      "_id": "auth-login",
+      "colId": "employee-profile",
+      "containerId": "auth-folder",
+      "name": "Login (Get Token)",
+      "url": "http://localhost:3000/auth/login",
+      "method": "POST",
+      "sortNum": 10000,
+      "created": "2025-12-10T00:00:00.000Z",
+      "modified": "2025-12-10T00:00:00.000Z",
+      "headers": [],
+      "params": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"email\": \"admin@company.com\",\n  \"password\": \"password123\"\n}",
+        "form": []
+      },
+      "tests": [
+        {
+          "type": "set-env-var",
+          "custom": "json.access_token",
+          "action": "setto",
+          "value": "{{access_token}}"
+        }
+      ]
+    },
+    {
+      "_id": "get-profile",
+      "colId": "employee-profile",
+      "containerId": "self-service-folder",
+      "name": "Get Employee Profile",
+      "url": "http://localhost:3000/employee-profile/{{employeeId}}",
+      "method": "GET",
+      "sortNum": 20000,
+      "created": "2025-12-10T00:00:00.000Z",
+      "modified": "2025-12-10T00:00:00.000Z",
+      "headers": [],
+      "params": [],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{access_token}}"
+      },
+      "tests": []
+    },
+    {
+      "_id": "update-self-service",
+      "colId": "employee-profile",
+      "containerId": "self-service-folder",
+      "name": "Update Self-Service Profile",
+      "url": "http://localhost:3000/employee-profile/{{employeeId}}/self-service",
+      "method": "PATCH",
+      "sortNum": 20100,
+      "created": "2025-12-10T00:00:00.000Z",
+      "modified": "2025-12-10T00:00:00.000Z",
+      "headers": [],
+      "params": [],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{access_token}}"
+      },
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"personalEmail\": \"newemail@gmail.com\",\n  \"phoneNumber\": \"+1234567890\",\n  \"emergencyContact\": {\n    \"name\": \"Jane Doe\",\n    \"relationship\": \"Spouse\",\n    \"phone\": \"+0987654321\"\n  },\n  \"currentAddress\": {\n    \"street\": \"123 Main St\",\n    \"city\": \"New York\",\n    \"state\": \"NY\",\n    \"postalCode\": \"10001\",\n    \"country\": \"USA\"\n  }\n}",
+        "form": []
+      },
+      "tests": []
+    },
+    {
+      "_id": "create-change-request",
+      "colId": "employee-profile",
+      "containerId": "self-service-folder",
+      "name": "Create Change Request",
+      "url": "http://localhost:3000/employee-profile/{{employeeId}}/change-requests",
+      "method": "POST",
+      "sortNum": 20200,
+      "created": "2025-12-10T00:00:00.000Z",
+      "modified": "2025-12-10T00:00:00.000Z",
+      "headers": [],
+      "params": [],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{access_token}}"
+      },
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"field\": \"bankAccountNumber\",\n  \"oldValue\": \"1234567890\",\n  \"newValue\": \"0987654321\",\n  \"reason\": \"Changed bank accounts\"\n}",
+        "form": []
+      },
+      "tests": []
+    },
+    {
+      "_id": "get-my-change-requests",
+      "colId": "employee-profile",
+      "containerId": "self-service-folder",
+      "name": "Get My Change Requests",
+      "url": "http://localhost:3000/employee-profile/{{employeeId}}/change-requests",
+      "method": "GET",
+      "sortNum": 20300,
+      "created": "2025-12-10T00:00:00.000Z",
+      "modified": "2025-12-10T00:00:00.000Z",
+      "headers": [],
+      "params": [],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{access_token}}"
+      },
+      "tests": []
+    },
+    {
+      "_id": "get-team-brief",
+      "colId": "employee-profile",
+      "containerId": "manager-folder",
+      "name": "Get Manager Team Brief",
+      "url": "http://localhost:3000/employee-profile/manager/team?supervisorPositionId={{positionId}}",
+      "method": "GET",
+      "sortNum": 30000,
+      "created": "2025-12-10T00:00:00.000Z",
+      "modified": "2025-12-10T00:00:00.000Z",
+      "headers": [],
+      "params": [
+        {
+          "name": "supervisorPositionId",
+          "value": "{{positionId}}",
+          "isPath": false
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{access_token}}"
+      },
+      "tests": []
+    },
+    {
+      "_id": "admin-create-employee",
+      "colId": "employee-profile",
+      "containerId": "admin-folder",
+      "name": "Admin - Create Employee",
+      "url": "http://localhost:3000/employee-profile/admin",
+      "method": "POST",
+      "sortNum": 40000,
+      "created": "2025-12-10T00:00:00.000Z",
+      "modified": "2025-12-10T00:00:00.000Z",
+      "headers": [],
+      "params": [],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{access_token}}"
+      },
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"workEmail\": \"john.doe@company.com\",\n  \"personalEmail\": \"john.doe@gmail.com\",\n  \"phoneNumber\": \"+1234567890\",\n  \"dateOfBirth\": \"1990-01-15\",\n  \"gender\": \"Male\",\n  \"maritalStatus\": \"Single\",\n  \"employmentStatus\": \"Active\",\n  \"hireDate\": \"2025-01-01\",\n  \"jobTitle\": \"Software Engineer\",\n  \"departmentId\": \"dept123\",\n  \"positionId\": \"pos456\",\n  \"currentAddress\": {\n    \"street\": \"456 Oak Ave\",\n    \"city\": \"San Francisco\",\n    \"state\": \"CA\",\n    \"postalCode\": \"94102\",\n    \"country\": \"USA\"\n  },\n  \"emergencyContact\": {\n    \"name\": \"Jane Doe\",\n    \"relationship\": \"Sister\",\n    \"phone\": \"+0987654321\"\n  }\n}",
+        "form": []
+      },
+      "tests": []
+    },
+    {
+      "_id": "admin-search-employees",
+      "colId": "employee-profile",
+      "containerId": "admin-folder",
+      "name": "Admin - Search Employees",
+      "url": "http://localhost:3000/employee-profile/admin/search?q=john",
+      "method": "GET",
+      "sortNum": 40100,
+      "created": "2025-12-10T00:00:00.000Z",
+      "modified": "2025-12-10T00:00:00.000Z",
+      "headers": [],
+      "params": [
+        {
+          "name": "q",
+          "value": "john",
+          "isPath": false
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{access_token}}"
+      },
+      "tests": []
+    },
+    {
+      "_id": "admin-get-pending-requests",
+      "colId": "employee-profile",
+      "containerId": "admin-folder",
+      "name": "Admin - Get Pending Change Requests",
+      "url": "http://localhost:3000/employee-profile/admin/change-requests/pending",
+      "method": "GET",
+      "sortNum": 40200,
+      "created": "2025-12-10T00:00:00.000Z",
+      "modified": "2025-12-10T00:00:00.000Z",
+      "headers": [],
+      "params": [],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{access_token}}"
+      },
+      "tests": []
+    },
+    {
+      "_id": "admin-review-request",
+      "colId": "employee-profile",
+      "containerId": "admin-folder",
+      "name": "Admin - Review Change Request",
+      "url": "http://localhost:3000/employee-profile/admin/change-requests/{{requestId}}/review",
+      "method": "PATCH",
+      "sortNum": 40300,
+      "created": "2025-12-10T00:00:00.000Z",
+      "modified": "2025-12-10T00:00:00.000Z",
+      "headers": [],
+      "params": [],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{access_token}}"
+      },
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"status\": \"Approved\",\n  \"reviewerNotes\": \"Change approved after verification\"\n}",
+        "form": []
+      },
+      "tests": []
+    },
+    {
+      "_id": "admin-update-employee",
+      "colId": "employee-profile",
+      "containerId": "admin-folder",
+      "name": "Admin - Update Employee Profile",
+      "url": "http://localhost:3000/employee-profile/admin/{{employeeId}}",
+      "method": "PATCH",
+      "sortNum": 40400,
+      "created": "2025-12-10T00:00:00.000Z",
+      "modified": "2025-12-10T00:00:00.000Z",
+      "headers": [],
+      "params": [],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{access_token}}"
+      },
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"jobTitle\": \"Senior Software Engineer\",\n  \"employmentStatus\": \"Active\",\n  \"salary\": 120000,\n  \"bankAccountNumber\": \"9876543210\"\n}",
+        "form": []
+      },
+      "tests": []
+    },
+    {
+      "_id": "admin-set-system-roles",
+      "colId": "employee-profile",
+      "containerId": "admin-folder",
+      "name": "Admin - Set System Roles",
+      "url": "http://localhost:3000/employee-profile/admin/{{employeeId}}/system-roles",
+      "method": "PATCH",
+      "sortNum": 40500,
+      "created": "2025-12-10T00:00:00.000Z",
+      "modified": "2025-12-10T00:00:00.000Z",
+      "headers": [],
+      "params": [],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{access_token}}"
+      },
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"systemRoles\": [\"HR_ADMIN\", \"DEPARTMENT_EMPLOYEE\"]\n}",
+        "form": []
+      },
+      "tests": []
+    },
+    {
+      "_id": "admin-deactivate-employee",
+      "colId": "employee-profile",
+      "containerId": "admin-folder",
+      "name": "Admin - Deactivate Employee",
+      "url": "http://localhost:3000/employee-profile/admin/{{employeeId}}/deactivate",
+      "method": "PATCH",
+      "sortNum": 40600,
+      "created": "2025-12-10T00:00:00.000Z",
+      "modified": "2025-12-10T00:00:00.000Z",
+      "headers": [],
+      "params": [],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{access_token}}"
+      },
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"reason\": \"Employee resigned\"\n}",
+        "form": []
+      },
+      "tests": []
+    }
+  ]
+}

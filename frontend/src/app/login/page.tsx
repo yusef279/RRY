@@ -47,35 +47,23 @@ export default function LoginPage() {
         password: form.password,
       });
 
-      // 🔑 Adjust this block to match your backend response shape
+      // Backend returns: { access_token: string, user: AuthPayload }
       const data = res.data;
       const token: string | undefined = data?.access_token;
-      const user = data?.user || {};
-      const roles: string[] =
-        user.roles ||
-        data?.roles ||
-        (user.role ? [user.role] : data?.role ? [data.role] : []);
-      const email: string = user.email || data?.email || form.email;
-      const name: string | undefined =
-        user.fullName || user.name || `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim();
+      const user = data?.user;
 
+      if (!user || !user.userId) {
+        throw new Error("Invalid response from server");
+      }
+
+      // Store the token
       if (token) {
         localStorage.setItem("access_token", token);
         api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
       }
 
-      if (roles && roles.length) {
-        localStorage.setItem("systemRoles", JSON.stringify(roles));
-      } else {
-        localStorage.removeItem("systemRoles");
-      }
-
-      localStorage.setItem("userEmail", email);
-      if (name && name.length > 0) {
-        localStorage.setItem("userName", name);
-      } else {
-        localStorage.removeItem("userName");
-      }
+      // Store the full user object
+      localStorage.setItem("user", JSON.stringify(user));
 
       router.push("/profile");
     } catch (err: any) {
@@ -132,6 +120,26 @@ export default function LoginPage() {
 
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Signing in..." : "Sign in"}
+            </Button>
+
+            <div className="relative my-4">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-white px-2 text-muted-foreground">
+                  Or
+                </span>
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={() => router.push("/register")}
+            >
+              Create new account
             </Button>
           </form>
         </CardContent>

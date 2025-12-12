@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
+import { getCurrentUser, clearAuth } from "@/lib/auth";
+import type { AuthPayload } from "@/types/auth";
 
 type AppShellProps = {
   title?: string;
@@ -70,92 +72,60 @@ export function AppShell({
   const pathname = usePathname();
   const router = useRouter();
 
-  const [userRoles, setUserRoles] = useState<string[] | null>(null);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [userName, setUserName] = useState<string | null>(null);
+  const [user, setUser] = useState<AuthPayload | null>(null);
 
-  // Load roles + email + name from localStorage (set in login)
+  // Load current user from localStorage
   useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    try {
-      const rolesRaw = localStorage.getItem("systemRoles");
-      const emailRaw = localStorage.getItem("userEmail");
-      const nameRaw = localStorage.getItem("userName");
-
-      if (rolesRaw) {
-        const parsed = JSON.parse(rolesRaw);
-        if (Array.isArray(parsed)) {
-          setUserRoles(parsed.filter((r) => typeof r === "string"));
-        } else if (typeof parsed === "string") {
-          setUserRoles([parsed]);
-        } else {
-          setUserRoles(null);
-        }
-      } else {
-        setUserRoles(null);
-      }
-
-      setUserEmail(emailRaw || null);
-      setUserName(nameRaw || null);
-    } catch {
-      setUserRoles(null);
-      setUserEmail(null);
-      setUserName(null);
-    }
+    const currentUser = getCurrentUser();
+    setUser(currentUser);
   }, []);
 
   // Helper: does user have at least one of the given roles?
   const hasAnyRole = (required?: string[]) => {
     if (!required || required.length === 0) return true; // no restriction
-    if (!userRoles || userRoles.length === 0) return false;
-    return required.some((r) => userRoles.includes(r));
+    if (!user || !user.role) return false;
+    return required.includes(user.role);
   };
 
   // Which nav sections should be visible?
   const visibleSections = useMemo(() => {
-    // If we don't know roles yet, show everything to avoid a weird flash.
-    if (userRoles === null) return navSections;
+    // If we don't know user yet, show everything to avoid a weird flash.
+    if (user === null) return navSections;
     return navSections.filter((section) => hasAnyRole(section.requiredRoles));
-  }, [userRoles]);
+  }, [user]);
 
   // Page-level permission check
   const isAllowed =
     !allowedRoles ||
     !allowedRoles.length ||
-    (userRoles && hasAnyRole(allowedRoles));
+    (user && hasAnyRole(allowedRoles));
 
-  // If we have both: allowedRoles + userRoles, and user is not allowed,
+  // If we have both: allowedRoles + user, and user is not allowed,
   // redirect them to /profile.
   useEffect(() => {
-    if (allowedRoles && allowedRoles.length && userRoles && !isAllowed) {
+    if (allowedRoles && allowedRoles.length && user && !isAllowed) {
       router.replace("/profile");
     }
-  }, [allowedRoles, isAllowed, router, userRoles]);
+  }, [allowedRoles, isAllowed, router, user]);
 
   const handleLogout = () => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("systemRoles");
-      localStorage.removeItem("userEmail");
-      localStorage.removeItem("userName");
-    }
+    clearAuth();
     router.push("/login");
   };
 
   const initials = useMemo(() => {
-    if (userName) {
-      const parts = userName.trim().split(" ");
-      if (parts.length === 1) {
-        return parts[0].slice(0, 2).toUpperCase();
-      }
-      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    if (!user) return "ME";
+
+    const email = user.email || "";
+    // Try to extract name from email if available
+    const emailName = email.split("@")[0];
+
+    if (emailName && emailName.length >= 2) {
+      return emailName.slice(0, 2).toUpperCase();
     }
-    if (userEmail) {
-      return userEmail[0]?.toUpperCase() ?? "ME";
-    }
-    return "ME";
-  }, [userEmail, userName]);
+
+    return email[0]?.toUpperCase() ?? "ME";
+  }, [user]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-50 text-slate-900">
@@ -211,10 +181,10 @@ export function AppShell({
             </Avatar>
             <div className="flex-1">
               <p className="text-sm font-medium leading-none">
-                {userName || "Current user"}
+                {user?.email?.split("@")[0] || "Current user"}
               </p>
               <p className="mt-1 text-xs text-slate-500">
-                {userEmail || "user@example.com"}
+                {user?.email || "user@example.com"}
               </p>
             </div>
             <Button

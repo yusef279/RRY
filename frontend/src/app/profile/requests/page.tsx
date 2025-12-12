@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/layout/app-shell";
@@ -11,133 +12,168 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { api } from "@/lib/api";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-type ChangeRequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELED";
+import { api } from "@/lib/api";
+import type { AuthPayload } from "@/types/auth";
 
 type ChangeRequest = {
-  _id?: string;
-  field?: string;
-  currentValue?: string;
-  requestedValue?: string;
+  _id: string;
+  requestId: string;
+  employeeProfileId: string;
+
+  requestDescription: string;
+
   reason?: string;
-  status?: ChangeRequestStatus;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELED";
+
+  submittedAt?: string;
+  processedAt?: string;
+
   createdAt?: string;
+  updatedAt?: string;
 };
 
-const FIELDS = [
-  { value: "phone", label: "Phone number" },
-  { value: "address", label: "Address" },
-  { value: "bio", label: "Bio / Notes" },
-  // add more if your backend supports them
-];
-
-export default function ProfileChangeRequestsPage() {
-  const [requests, setRequests] = useState<ChangeRequest[]>([]);
+export default function ProfileRequestsPage() {
+  const router = useRouter();
+  const [user, setUser] = useState<AuthPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [requests, setRequests] = useState<ChangeRequest[]>([]);
 
-  const [form, setForm] = useState({
-    field: "",
-    currentValue: "",
-    requestedValue: "",
-    reason: "",
-  });
+  const [fieldName, setFieldName] = useState("");
+  const [currentValue, setCurrentValue] = useState("");
+  const [requestedValue, setRequestedValue] = useState("");
+  const [reason, setReason] = useState("");
 
+  /* -----------------------------------------------------
+     Parse requestDescription → {fieldName, currentValue, ...}
+     ----------------------------------------------------- */
+  function parseRequestDescription(text: string) {
+    if (!text) return {};
+
+    const lines = text.split("\n").map((l) => l.trim());
+
+    const get = (label: string) =>
+      lines.find((line) => line.startsWith(label))?.replace(label, "").trim() || "—";
+
+    return {
+      fieldName: get("Field:"),
+      currentValue: get("From:"),
+      requestedValue: get("To:"),
+      reason: get("Reason:"),
+    };
+  }
+
+  /* -----------------------------------------------------
+     Load current user and their change requests
+     ----------------------------------------------------- */
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const stored = localStorage.getItem("user");
+    if (!stored) {
+      router.push("/login");
+      return;
+    }
+
+    let parsed: AuthPayload | null = null;
+    try {
+      parsed = JSON.parse(stored);
+    } catch {
+      router.push("/login");
+      return;
+    }
+
+    if (!parsed?.employeeId) {
+      router.push("/login");
+      return;
+    }
+
+    setUser(parsed);
+
     const loadRequests = async () => {
       try {
-        const res = await api.get(
-          "/employee-profile/self/change-requests"
+        const res = await api.get<ChangeRequest[]>(
+          `/employee-profile/${parsed!.employeeId}/change-requests`,
         );
         setRequests(res.data || []);
       } catch (error: any) {
-        if (error?.response?.status === 404) {
-          // No requests yet – that's fine
-          setRequests([]);
-        } else {
-          console.error(error);
-          toast.error(
-            error?.response?.data?.message || "Failed to load change requests."
-          );
+        const msg = error?.response?.data?.message;
+        if (error?.response?.status === 401) {
+          router.push("/login");
+          return;
         }
+        toast.error(msg || "Failed to load change requests.");
       } finally {
         setLoading(false);
       }
     };
 
     loadRequests();
-  }, []);
+  }, [router]);
 
+  /* -----------------------------------------------------
+     Submit new change request
+     ----------------------------------------------------- */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!form.field || !form.requestedValue || !form.reason) {
-      toast.error("Please fill in all required fields.");
+    if (!user?.employeeId) {
+      toast.error("No employee profile linked to this account.");
+      return;
+    }
+
+    if (!fieldName || !requestedValue) {
+      toast.error("Please choose a field and a requested value.");
       return;
     }
 
     setSubmitting(true);
-    try {
-      // Adjust body keys to match your backend DTO if needed
-      const res = await api.post("/employee-profile/change-requests", {
-        field: form.field,
-        currentValue: form.currentValue || undefined,
-        requestedValue: form.requestedValue,
-        reason: form.reason,
-      });
 
-      const created: ChangeRequest = res.data;
-      setRequests((prev) => [created, ...prev]);
-      setForm({
-        field: "",
-        currentValue: "",
-        requestedValue: "",
-        reason: "",
-      });
+    try {
+      const payload = {
+        requestDescription: `
+Field: ${fieldName}
+From: ${currentValue || "—"}
+To: ${requestedValue}
+Reason: ${reason || "—"}
+        `,
+      };
+
+      const res = await api.post<ChangeRequest>(
+        `/employee-profile/${user.employeeId}/change-requests`,
+        payload,
+      );
+
+      setRequests((prev) => [res.data, ...prev]);
+
+      setFieldName("");
+      setCurrentValue("");
+      setRequestedValue("");
+      setReason("");
+
       toast.success("Change request submitted.");
     } catch (error: any) {
-      console.error(error);
-      toast.error(
-        error?.response?.data?.message || "Could not submit change request."
-      );
+      const msg = error?.response?.data?.message;
+      toast.error(msg || "Could not submit change request.");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const formatDateTime = (value?: string) => {
-    if (!value) return "-";
-    const d = new Date(value);
-    if (isNaN(d.getTime())) return value;
-    return d.toLocaleString();
-  };
-
+  /* -----------------------------------------------------
+     UI
+     ----------------------------------------------------- */
   return (
     <AppShell title="Profile change requests">
       <div className="grid gap-6 lg:grid-cols-[360px,1fr]">
-        {/* LEFT: new request form */}
+        
+        {/* LEFT: CREATE REQUEST */}
         <Card>
           <CardHeader>
             <CardTitle>Request profile change</CardTitle>
@@ -146,60 +182,38 @@ export default function ProfileChangeRequestsPage() {
               and approve or reject your request.
             </CardDescription>
           </CardHeader>
+
           <CardContent>
             <form className="space-y-4" onSubmit={handleSubmit}>
+              
               <div className="space-y-2">
-                <Label>Field to change</Label>
-                <Select
-                  value={form.field}
-                  onValueChange={(value) =>
-                    setForm((prev) => ({ ...prev, field: value }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a field" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {FIELDS.map((f) => (
-                      <SelectItem key={f.value} value={f.value}>
-                        {f.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="currentValue">
-                  Current value{" "}
-                  <span className="text-xs text-muted-foreground">(optional)</span>
-                </Label>
+                <Label htmlFor="field">Field to change</Label>
                 <Input
-                  id="currentValue"
-                  value={form.currentValue}
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      currentValue: e.target.value,
-                    }))
-                  }
-                  placeholder="What is currently saved in the system?"
+                  id="field"
+                  placeholder="e.g. Personal email, Mobile phone"
+                  value={fieldName}
+                  onChange={(e) => setFieldName(e.target.value)}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="requestedValue">Requested new value</Label>
+                <Label htmlFor="current">Current value (optional)</Label>
                 <Input
-                  id="requestedValue"
-                  required
-                  value={form.requestedValue}
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      requestedValue: e.target.value,
-                    }))
-                  }
+                  id="current"
+                  placeholder="What is currently saved in the system?"
+                  value={currentValue}
+                  onChange={(e) => setCurrentValue(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="requested">Requested new value</Label>
+                <Input
+                  id="requested"
                   placeholder="What should it be changed to?"
+                  value={requestedValue}
+                  onChange={(e) => setRequestedValue(e.target.value)}
+                  required
                 />
               </div>
 
@@ -207,13 +221,10 @@ export default function ProfileChangeRequestsPage() {
                 <Label htmlFor="reason">Reason</Label>
                 <Textarea
                   id="reason"
-                  required
-                  rows={4}
-                  value={form.reason}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, reason: e.target.value }))
-                  }
+                  rows={3}
                   placeholder="Explain why this change is needed."
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
                 />
               </div>
 
@@ -222,70 +233,64 @@ export default function ProfileChangeRequestsPage() {
                   {submitting ? "Submitting..." : "Submit request"}
                 </Button>
               </div>
+
             </form>
           </CardContent>
         </Card>
 
-        {/* RIGHT: requests list */}
+        {/* RIGHT: LIST REQUESTS */}
         <Card>
           <CardHeader>
             <CardTitle>My change requests</CardTitle>
             <CardDescription>
-              Track the status of your profile change requests.
+              Track the status of your submitted profile change requests.
             </CardDescription>
           </CardHeader>
+
           <CardContent>
             {loading ? (
-              <p className="text-muted-foreground">Loading requests...</p>
+              <p className="text-sm text-muted-foreground">
+                Loading change requests...
+              </p>
             ) : requests.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                You haven’t submitted any change requests yet.
+                You haven&apos;t submitted any change requests yet.
               </p>
             ) : (
-              <ScrollArea className="h-[480px]">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Field</TableHead>
-                      <TableHead>Requested value</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Created at</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {requests.map((req) => (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Field</TableHead>
+                    <TableHead>Requested value</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Submitted</TableHead>
+                  </TableRow>
+                </TableHeader>
+
+                <TableBody>
+                  {requests.map((req) => {
+                    const parsed = parseRequestDescription(req.requestDescription);
+
+                    return (
                       <TableRow key={req._id}>
-                        <TableCell className="font-medium">
-                          {req.field || "-"}
-                        </TableCell>
-                        <TableCell>{req.requestedValue || "-"}</TableCell>
+                        <TableCell>{parsed.fieldName}</TableCell>
+                        <TableCell>{parsed.requestedValue}</TableCell>
+                        <TableCell>{req.status}</TableCell>
                         <TableCell>
-                          {req.status ? (
-                            <Badge
-                              variant={
-                                req.status === "APPROVED"
-                                  ? "default"
-                                  : req.status === "REJECTED"
-                                  ? "destructive"
-                                  : "secondary"
-                              }
-                              className="uppercase"
-                            >
-                              {req.status}
-                            </Badge>
-                          ) : (
-                            "-"
-                          )}
+                          {req.submittedAt
+                            ? new Date(req.submittedAt).toLocaleDateString()
+                            : "—"}
                         </TableCell>
-                        <TableCell>{formatDateTime(req.createdAt)}</TableCell>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
+                    );
+                  })}
+                </TableBody>
+
+              </Table>
             )}
           </CardContent>
         </Card>
+
       </div>
     </AppShell>
   );

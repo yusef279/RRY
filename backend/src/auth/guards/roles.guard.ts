@@ -21,16 +21,31 @@ export class RolesGuard implements CanActivate {
     const user: AuthUser = request.user;
 
     if (!user || !user.role) {
+      console.error('❌ Permission check failed: User not authenticated or role missing');
       throw new ForbiddenException('User not authenticated or role missing');
     }
 
     const userPermissions = ROLE_PERMISSIONS[user.role] || [];
+
+    console.log('🔒 Permission check:', {
+      user: user.email,
+      role: user.role,
+      requiredPermissions,
+      userPermissions,
+      endpoint: request.url,
+    });
 
     const hasPermission = requiredPermissions.some(permission =>
       userPermissions.includes(permission),
     );
 
     if (!hasPermission) {
+      console.error('❌ Permission denied:', {
+        user: user.email,
+        role: user.role,
+        required: requiredPermissions,
+        available: userPermissions,
+      });
       throw new ForbiddenException('Insufficient permissions');
     }
 

@@ -123,13 +123,12 @@ export class EmployeeProfileService {
     const requestId = `EPCR-${Date.now()}`;
 
     const changeRequest = await this.changeRequestModel.create({
-      requestId,
-      employeeProfileId: employee._id,
-      requestDescription: dto.requestDescription,
-      reason: dto.reason,
-      status: ProfileChangeStatus.PENDING,
-      submittedAt: new Date(),
-    });
+        requestId,
+        employeeProfileId: employee._id,
+        requestDescription: dto.requestDescription, // <-- THE ONLY REQUIRED FIELD
+        status: ProfileChangeStatus.PENDING,
+        submittedAt: new Date(),
+      });
 
     return changeRequest;
   }
@@ -335,7 +334,9 @@ export class EmployeeProfileService {
       await this.changeRequestModel.create({
         requestId: `EPCR-TERMINATE-${Date.now()}`,
         employeeProfileId: new Types.ObjectId(employeeProfileId),
-        requestDescription: 'Profile deactivated / terminated',
+        fieldName: 'Employment Status',
+        currentValue: 'ACTIVE',
+        requestedValue: 'TERMINATED',
         reason,
         status: ProfileChangeStatus.APPROVED,
         submittedAt: new Date(),
