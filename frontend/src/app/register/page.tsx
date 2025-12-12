@@ -1,117 +1,170 @@
-'use client'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import * as z from 'zod'
-import axios from 'axios'
-import { toast } from 'sonner'
-import AuthCard from '@/components/auth/authCard'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Button } from '@/components/ui/button'
-import { SystemRole } from '@/enum' //
+"use client";
 
-const schema = z.object({
-  firstName: z.string().min(1),
-  lastName: z.string().min(1),
-  email: z.string().email(),
-  password: z.string().min(6),
-  employeeNumber: z.string().min(1),
-  nationalId: z.string().min(10),
-  dateOfHire: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD'),
-  role: z.nativeEnum(SystemRole),
-})
-type Form = z.infer<typeof schema>
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { api } from "@/lib/api";
+
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+type RegisterFormState = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+};
 
 export default function RegisterPage() {
-  const router = useRouter()
-  const [loading, setLoading] = useState(false)
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<Form>({ resolver: zodResolver(schema) })
+  const router = useRouter();
 
-  const onSubmit = async (data: Form) => {
-    setLoading(true)
+  const [form, setForm] = useState<RegisterFormState>({
+    firstName: "",
+    lastName: "",
+    email: "",
+    password: "",
+  });
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  const handleChange =
+    (field: keyof RegisterFormState) =>
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setForm((prev) => ({ ...prev, [field]: e.target.value }));
+    };
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
     try {
-      await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/auth/register`, data, {
-        withCredentials: true,
-      })
-      toast.success('Account created – please log in')
-      router.push('/login')
-    } catch (e: any) {
-      toast.error(e.response?.data?.message || 'Registration failed')
+      // Only send name, email, and password
+      await api.post("/auth/register", {
+        email: form.email,
+        password: form.password,
+        firstName: form.firstName,
+        lastName: form.lastName,
+      });
+
+      // Show success message
+      setSuccess(true);
+      setTimeout(() => {
+        router.push("/login");
+      }, 2000);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message;
+      if (Array.isArray(msg)) {
+        setError(msg.join(" • "));
+      } else if (typeof msg === "string") {
+        setError(msg);
+      } else {
+        setError("Could not create account. Please try again.");
+      }
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
   return (
-    <AuthCard title="Create account" desc="Fill in your details below">
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <Label>First name</Label>
-            <Input {...register('firstName')} />
-            {errors.firstName && <p className="text-sm text-destructive">{errors.firstName.message}</p>}
-          </div>
-          <div>
-            <Label>Last name</Label>
-            <Input {...register('lastName')} />
-            {errors.lastName && <p className="text-sm text-destructive">{errors.lastName.message}</p>}
-          </div>
-        </div>
+    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+      <Card className="w-full max-w-md shadow-lg">
+        <CardHeader>
+          <CardTitle className="text-2xl font-semibold">
+            Create account
+          </CardTitle>
+          <CardDescription>
+            Register to get started. An admin will set up your employee profile.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form className="space-y-4" onSubmit={handleSubmit}>
+            {/* Name row */}
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="firstName">First name</Label>
+                <Input
+                  id="firstName"
+                  required
+                  value={form.firstName}
+                  onChange={handleChange("firstName")}
+                  placeholder="John"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="lastName">Last name</Label>
+                <Input
+                  id="lastName"
+                  required
+                  value={form.lastName}
+                  onChange={handleChange("lastName")}
+                  placeholder="Doe"
+                />
+              </div>
+            </div>
 
-        <div>
-          <Label>Email</Label>
-          <Input type="email" {...register('email')} />
-          {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
-        </div>
+            {/* Email */}
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                required
+                value={form.email}
+                onChange={handleChange("email")}
+                placeholder="you@example.com"
+              />
+            </div>
 
-        <div>
-          <Label>Password</Label>
-          <Input type="password" {...register('password')} />
-          {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
-        </div>
+            {/* Password */}
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                required
+                value={form.password}
+                onChange={handleChange("password")}
+                placeholder="At least 6 characters"
+                minLength={6}
+              />
+            </div>
 
-        <div>
-          <Label>Employee number</Label>
-          <Input {...register('employeeNumber')} />
-          {errors.employeeNumber && <p className="text-sm text-destructive">{errors.employeeNumber.message}</p>}
-        </div>
+            {success && (
+              <p className="text-sm font-medium text-green-600">
+                Account created successfully! Redirecting to login...
+              </p>
+            )}
 
-        <div>
-          <Label>National ID</Label>
-          <Input {...register('nationalId')} />
-          {errors.nationalId && <p className="text-sm text-destructive">{errors.nationalId.message}</p>}
-        </div>
+            {error && (
+              <p className="text-sm font-medium text-red-600">{error}</p>
+            )}
 
-        <div>
-          <Label>Date of hire</Label>
-          <Input type="date" {...register('dateOfHire')} />
-          {errors.dateOfHire && <p className="text-sm text-destructive">{errors.dateOfHire.message}</p>}
-        </div>
+            <Button type="submit" disabled={loading || success} className="w-full">
+              {loading ? "Creating account..." : "Create account"}
+            </Button>
 
-        <div>
-          <Label>Initial role</Label>
-          <select {...register('role')} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-            {Object.values(SystemRole).map((r) => (
-              <option key={r} value={r}>{r}</option>
-            ))}
-          </select>
-          {errors.role && <p className="text-sm text-destructive">{errors.role.message}</p>}
-        </div>
-
-        <Button
-  type="submit"
-  className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white shadow-lg hover:shadow-indigo-500/40 transition-all"
-  disabled={loading}
->
-  {loading ? 'Creating..' : 'Create'}
-</Button>
-      </form>
-    </AuthCard>
-  )
+            <p className="text-center text-sm text-muted-foreground">
+              Already have an account?{" "}
+              <button
+                type="button"
+                className="underline underline-offset-2 hover:text-primary"
+                onClick={() => router.push("/login")}
+              >
+                Sign in
+              </button>
+            </p>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
