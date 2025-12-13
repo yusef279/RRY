@@ -17,6 +17,7 @@ export interface AuthPayload {
   userId: string
   email: string
   role: UserRole
+  permissions?: string[] // <-- NEW
 
   employeeId?: string
   departmentId?: string
