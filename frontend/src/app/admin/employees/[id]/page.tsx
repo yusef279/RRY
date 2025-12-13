@@ -60,7 +60,6 @@ export default function EmployeeDetailPage() {
   const [form, setForm] = useState<EmployeeProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [profilePicture, setProfilePicture] = useState<File[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
   const [allPositions, setAllPositions] = useState<Position[]>([])
   const [filteredPositions, setFilteredPositions] = useState<Position[]>([])
@@ -134,29 +133,6 @@ export default function EmployeeDetailPage() {
         ? { ...prev, roles: roles.filter((r) => r !== role) }
         : { ...prev, roles: [...roles, role] }
     })
-  }
-
-  const handleProfilePictureUpload = async () => {
-    if (profilePicture.length === 0) {
-      toast.error('Please select a profile picture')
-      return
-    }
-
-    const formData = new FormData()
-    formData.append('profilePicture', profilePicture[0])
-
-    try {
-      const res = await api.post(`/employee-profile/admin/${form?._id}/profile-picture`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      })
-      setForm(res.data)
-      setProfilePicture([])
-      toast.success('Profile picture updated successfully')
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to upload profile picture')
-    }
   }
 
   const save = async () => {
@@ -241,40 +217,6 @@ export default function EmployeeDetailPage() {
             {/* PERSONAL INFO TAB */}
             <TabsContent value="personal" className="space-y-4">
               <div className="grid gap-4 lg:grid-cols-[300px,1fr]">
-                {/* Profile Picture Card */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Profile Picture</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex justify-center">
-                      <Avatar className="h-32 w-32">
-                        <AvatarImage src={form.profilePictureUrl} />
-                        <AvatarFallback className="text-4xl">
-                          {initials}
-                        </AvatarFallback>
-                      </Avatar>
-                    </div>
-                    <FileUpload
-                      value={profilePicture}
-                      onChange={setProfilePicture}
-                      accept="image/*"
-                      maxFiles={1}
-                      maxSize={2 * 1024 * 1024}
-                    />
-                    {profilePicture.length > 0 && (
-                      <Button
-                        onClick={handleProfilePictureUpload}
-                        className="w-full"
-                        size="sm"
-                      >
-                        <Upload className="h-4 w-4 mr-2" />
-                        Upload Picture
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
-
                 {/* Personal Details Card */}
                 <Card>
                   <CardHeader>

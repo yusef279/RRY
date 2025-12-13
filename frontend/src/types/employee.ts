@@ -16,6 +16,7 @@ export interface PositionRef {
   _id: string
   name: string
   code?: string
+  title?: string
   department?: DepartmentRef
 }
 

@@ -8,14 +8,8 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 
-import {
-  Department,
-  DepartmentDocument,
-} from './models/department.schema';
-import {
-  Position,
-  PositionDocument,
-} from './models/position.schema';
+import { Department, DepartmentDocument } from './models/department.schema';
+import { Position, PositionDocument } from './models/position.schema';
 import {
   PositionAssignment,
   PositionAssignmentDocument,
@@ -88,10 +82,6 @@ export class OrganizationStructureService {
   }
 
   private async notify(event: string, payload: any) {
-    // If NotificationService is available:
-    // await this.notificationService.send(event, payload);
-
-    // Fallback logging:
     console.log('NOTIFICATION:', event, payload);
   }
 
@@ -235,25 +225,32 @@ export class OrganizationStructureService {
       throw new BadRequestException('Invalid departmentId.');
     }
 
-    if (dto.reportsToPositionId) {
-      const manager = await this.posModel.findById(dto.reportsToPositionId);
+    if ((dto as any).reportsToPositionId) {
+      const manager = await this.posModel.findById(
+        (dto as any).reportsToPositionId,
+      );
       if (!manager) {
         throw new BadRequestException('reportsToPositionId does not exist.');
       }
       // 🔹 REQ-OSM-09: REMOVE circular check during creation
     }
 
+    // ✅ FIX: title must never be null
+    // Accept either dto.title (correct) OR dto.name (frontend mistake) OR fallback to code.
+    const safeTitle =
+      (dto as any).title ?? (dto as any).name ?? dto.code;
+
     const insertResult = await this.posModel.collection.insertOne({
       code: dto.code,
-      title: dto.title,
-      description: dto.description,
+      title: safeTitle, // ✅ FIXED
+      description: (dto as any).description,
       departmentId: new Types.ObjectId(dto.departmentId),
-      reportsToPositionId: dto.reportsToPositionId
-        ? new Types.ObjectId(dto.reportsToPositionId)
+      reportsToPositionId: (dto as any).reportsToPositionId
+        ? new Types.ObjectId((dto as any).reportsToPositionId)
         : null,
-      jobKey: dto.jobKey,
-      payGrade: dto.payGrade,
-      costCenter: dto.costCenter,
+      jobKey: (dto as any).jobKey,
+      payGrade: (dto as any).payGrade,
+      costCenter: (dto as any).costCenter,
       isActive: true,
     });
 
@@ -285,45 +282,69 @@ export class OrganizationStructureService {
 
     const before = this.clean(pos.toObject());
 
-    if (dto.departmentId) {
-      const dept = await this.deptModel.findById(dto.departmentId);
+    if ((dto as any).departmentId) {
+      const dept = await this.deptModel.findById((dto as any).departmentId);
       if (!dept || !dept.isActive) {
         throw new BadRequestException('Invalid departmentId.');
       }
     }
 
-    if (dto.reportsToPositionId) {
-      const manager = await this.posModel.findById(dto.reportsToPositionId);
+    if ((dto as any).reportsToPositionId) {
+      const manager = await this.posModel.findById(
+        (dto as any).reportsToPositionId,
+      );
       if (!manager) {
         throw new BadRequestException('reportsToPositionId does not exist.');
       }
 
-      if (dto.reportsToPositionId === id) {
+      if ((dto as any).reportsToPositionId === id) {
         throw new BadRequestException('Position cannot report to itself.');
       }
 
-      if (
-        await this.createsCircularReporting(id, dto.reportsToPositionId)
-      ) {
+      if (await this.createsCircularReporting(id, (dto as any).reportsToPositionId)) {
         throw new BadRequestException(
           'Circular reporting line detected (REQ-OSM-09).',
         );
       }
     }
 
+    // ✅ FIX: map name -> title if frontend sends "name"
+    const incomingTitle =
+      (dto as any).title ?? (dto as any).name ?? undefined;
+
+    // ✅ IMPORTANT: don't spread dto directly (it could include "name" and save garbage)
+    const setDoc: any = {
+      // keep existing fields if not provided
+      title: incomingTitle !== undefined ? incomingTitle : pos.title,
+
+      description:
+        (dto as any).description !== undefined
+          ? (dto as any).description
+          : pos.description,
+
+      jobKey:
+        (dto as any).jobKey !== undefined ? (dto as any).jobKey : (pos as any).jobKey,
+
+      payGrade:
+        (dto as any).payGrade !== undefined ? (dto as any).payGrade : (pos as any).payGrade,
+
+      costCenter:
+        (dto as any).costCenter !== undefined
+          ? (dto as any).costCenter
+          : (pos as any).costCenter,
+
+      departmentId: (dto as any).departmentId
+        ? new Types.ObjectId((dto as any).departmentId)
+        : pos.departmentId,
+
+      reportsToPositionId: (dto as any).reportsToPositionId
+        ? new Types.ObjectId((dto as any).reportsToPositionId)
+        : pos.reportsToPositionId,
+    };
+
     await this.posModel.updateOne(
       { _id: new Types.ObjectId(id) },
-      {
-        $set: {
-          ...dto,
-          departmentId: dto.departmentId
-            ? new Types.ObjectId(dto.departmentId)
-            : pos.departmentId,
-          reportsToPositionId: dto.reportsToPositionId
-            ? new Types.ObjectId(dto.reportsToPositionId)
-            : pos.reportsToPositionId,
-        },
-      },
+      { $set: setDoc },
     );
 
     const updated = await this.posModel.findById(id);
@@ -370,10 +391,7 @@ export class OrganizationStructureService {
       await a.save();
     }
 
-    await this.posModel.updateOne(
-      { _id: pos._id },
-      { $set: { isActive: false } },
-    );
+    await this.posModel.updateOne({ _id: pos._id }, { $set: { isActive: false } });
 
     const updated = await this.posModel.findById(pos._id);
     if (!updated) {
@@ -424,9 +442,7 @@ export class OrganizationStructureService {
       employeeId,
       endDate: { $exists: false },
     });
-    if (!assignment) throw new NotFoundException(
-      'Employee has no active position.',
-    );
+    if (!assignment) throw new NotFoundException('Employee has no active position.');
 
     const pos = await this.posModel.findById(assignment.positionId);
     if (!pos) throw new NotFoundException('Position not found.');
@@ -439,9 +455,7 @@ export class OrganizationStructureService {
       reqUser.role === 'Department Head' &&
       reqUser.employeeId !== managerEmployeeId
     ) {
-      throw new ForbiddenException(
-        'You may only view your own team structure.',
-      );
+      throw new ForbiddenException('You may only view your own team structure.');
     }
 
     const manager = await this.employeeModel.findById(managerEmployeeId);
@@ -451,9 +465,7 @@ export class OrganizationStructureService {
       employeeId: managerEmployeeId,
       endDate: { $exists: false },
     });
-    if (!assignment) throw new NotFoundException(
-      'Manager has no active position.',
-    );
+    if (!assignment) throw new NotFoundException('Manager has no active position.');
 
     const managerPos = await this.posModel.findById(assignment.positionId);
     if (!managerPos) throw new NotFoundException('Position not found.');
@@ -518,9 +530,7 @@ export class OrganizationStructureService {
 
   async createChangeRequest(dto: CreateStructureChangeRequestDto) {
     const emp = await this.employeeModel.findById(dto.requestedByEmployeeId);
-    if (!emp) throw new NotFoundException(
-      'requestedByEmployeeId does not exist.',
-    );
+    if (!emp) throw new NotFoundException('requestedByEmployeeId does not exist.');
 
     const requestNumber = dto.requestNumber ?? this.generateReqNumber();
 
@@ -549,7 +559,6 @@ export class OrganizationStructureService {
       performedByEmployeeId: dto.requestedByEmployeeId,
     });
 
-    // 🔹 REQ-OSM-11: notify on submission
     await this.notify('STRUCTURE_CHANGE_SUBMITTED', created);
 
     return created;
@@ -607,7 +616,7 @@ export class OrganizationStructureService {
           await this.deactivatePosition(req.targetPositionId.toString(), {
             closedAt: new Date().toISOString(),
             reason: req.reason,
-            performedByEmployeeId: undefined, // assigned in approval
+            performedByEmployeeId: undefined,
           });
         }
         break;
@@ -617,10 +626,7 @@ export class OrganizationStructureService {
     }
   }
 
-  async approveChangeRequest(
-    id: Types.ObjectId,
-    dto: ApproveStructureChangeRequestDto,
-  ) {
+  async approveChangeRequest(id: Types.ObjectId, dto: ApproveStructureChangeRequestDto) {
     if (!dto.approverEmployeeId)
       throw new BadRequestException('approverEmployeeId missing');
 
@@ -664,10 +670,7 @@ export class OrganizationStructureService {
     return req;
   }
 
-  async rejectChangeRequest(
-    id: Types.ObjectId,
-    dto: RejectStructureChangeRequestDto,
-  ) {
+  async rejectChangeRequest(id: Types.ObjectId, dto: RejectStructureChangeRequestDto) {
     if (!dto.approverEmployeeId)
       throw new BadRequestException('approverEmployeeId missing');
 
