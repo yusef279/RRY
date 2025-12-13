@@ -93,10 +93,17 @@ export class OrganizationStructureController {
   @Patch('positions/:id/deactivate')
   @UseGuards(PermissionsGuard)
   @Permissions(Permission.MANAGE_ORG_STRUCTURE)
-  deactivatePosition(@Param('id') id: string, @Body() dto: DeactivatePositionDto, @CurrentUser() user: AuthUser) {
-    dto.performedByEmployeeId = user.employeeId!;
-    return this.service.deactivatePosition(id, dto);
+  deactivatePosition(
+    @Param('id') id: string,
+    @Body() dto: DeactivatePositionDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    // if frontend sends no body, dto will be undefined
+    const safeDto: DeactivatePositionDto = (dto ?? ({} as DeactivatePositionDto));
+    safeDto.performedByEmployeeId = user.employeeId!;
+    return this.service.deactivatePosition(id, safeDto);
   }
+
 
   @Get('positions')
   @UseGuards(PermissionsGuard)

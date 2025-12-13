@@ -2,7 +2,8 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  IsNumber,
+  ValidateIf,
+  IsMongoId,
 } from 'class-validator';
 
 export class CreatePositionDto {
@@ -10,28 +11,39 @@ export class CreatePositionDto {
   @IsNotEmpty()
   code: string; // Unique ID (BR-5)
 
+  // ✅ accept either title OR name (frontend uses "name")
+  @ValidateIf((o) => !o.name) // title required if name is missing
   @IsString()
   @IsNotEmpty()
-  title: string;
+  title?: string;
+
+  @ValidateIf((o) => !o.title) // name required if title is missing
+  @IsString()
+  @IsNotEmpty()
+  name?: string;
+
+  // ✅ make these optional because your UI doesn’t send them
+  @IsOptional()
+  @IsString()
+  jobKey?: string; // BR-10
+
+  // ✅ your DB currently has payGrade as string sometimes ("high", "hifh")
+  @IsOptional()
+  @IsString()
+  payGrade?: string;
 
   @IsString()
   @IsNotEmpty()
-  jobKey: string; // BR-10
-
-  @IsNumber()
-  payGrade: number; // BR-10
-
-  @IsString()
-  @IsNotEmpty()
+  @IsMongoId()
   departmentId: string; // BR-10
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  costCenter: string; // BR-30
+  costCenter?: string; // BR-30
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  reportsToPositionId: string; // BR-30
+  reportsToPositionId?: string; // BR-30
 
   @IsOptional()
   @IsString()

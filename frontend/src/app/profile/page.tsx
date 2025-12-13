@@ -35,7 +35,6 @@ export default function ProfilePage() {
       }
 
       try {
-        // GET /employee-profile/:id
         const res = await api.get(`/employee-profile/${user.employeeId}`);
         const data: EmployeeProfile = res.data;
         setProfile(data);
@@ -48,7 +47,6 @@ export default function ProfilePage() {
           return;
         }
 
-        // Treat "Invalid employee profile id" as "no profile exists"
         if (
           status === 400 &&
           (msg === "Invalid employee profile id" ||
@@ -77,16 +75,22 @@ export default function ProfilePage() {
     ? new Date(profile.dateOfHire).toLocaleDateString()
     : "Not set";
 
-  // Extract department and position names
+  // ✅ Department display (backend gives primaryDepartmentId populated with { name })
   const departmentName =
     typeof profile?.primaryDepartmentId === "object"
-      ? profile.primaryDepartmentId.name
-      : profile?.department?.name || "Not set";
+      ? (profile.primaryDepartmentId as any).name || "Not set"
+      : (profile as any)?.department?.name || "Not set";
 
+  // ✅ Position display (backend gives primaryPositionId populated with { title, code })
   const positionName =
     typeof profile?.primaryPositionId === "object"
-      ? profile.primaryPositionId.name
-      : profile?.position?.name || "Not set";
+      ? ((profile.primaryPositionId as any).title ||
+          (profile.primaryPositionId as any).code ||
+          "Not set")
+      : ((profile as any)?.position?.title ||
+          (profile as any)?.position?.name ||
+          (profile as any)?.position?.code ||
+          "Not set");
 
   return (
     <AppShell title="My profile">
@@ -104,7 +108,6 @@ export default function ProfilePage() {
         </Card>
       ) : (
         <div className="grid gap-6 lg:grid-cols-[320px,1fr]">
-          {/* LEFT: overview card */}
           <Card>
             <CardHeader className="flex flex-row items-center gap-4">
               <Avatar className="h-14 w-14">
@@ -166,7 +169,6 @@ export default function ProfilePage() {
             </CardContent>
           </Card>
 
-          {/* RIGHT: read-only details */}
           <Card>
             <CardHeader>
               <CardTitle>Contact & personal details</CardTitle>
@@ -179,21 +181,15 @@ export default function ProfilePage() {
               <div className="grid gap-6 md:grid-cols-2">
                 <div className="space-y-1">
                   <Label className="text-muted-foreground">Personal email</Label>
-                  <p className="text-sm">
-                    {profile.personalEmail || "Not set"}
-                  </p>
+                  <p className="text-sm">{profile.personalEmail || "Not set"}</p>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-muted-foreground">Mobile phone</Label>
-                  <p className="text-sm">
-                    {profile.mobilePhone || "Not set"}
-                  </p>
+                  <p className="text-sm">{profile.mobilePhone || "Not set"}</p>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-muted-foreground">Home phone</Label>
-                  <p className="text-sm">
-                    {profile.homePhone || "Not set"}
-                  </p>
+                  <p className="text-sm">{profile.homePhone || "Not set"}</p>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-muted-foreground">Date of Birth</Label>
@@ -205,15 +201,11 @@ export default function ProfilePage() {
                 </div>
                 <div className="space-y-1">
                   <Label className="text-muted-foreground">National ID</Label>
-                  <p className="text-sm">
-                    {profile.nationalId || "Not set"}
-                  </p>
+                  <p className="text-sm">{profile.nationalId || "Not set"}</p>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-muted-foreground">Marital Status</Label>
-                  <p className="text-sm">
-                    {profile.maritalStatus || "Not set"}
-                  </p>
+                  <p className="text-sm">{profile.maritalStatus || "Not set"}</p>
                 </div>
               </div>
 
@@ -221,20 +213,23 @@ export default function ProfilePage() {
                 <Label className="text-muted-foreground">Address</Label>
                 <p className="text-sm">
                   {profile.address?.streetAddress && (
-                    <>{profile.address.streetAddress}<br /></>
+                    <>
+                      {profile.address.streetAddress}
+                      <br />
+                    </>
                   )}
                   {profile.address?.city && (
-                    <>{profile.address.city}<br /></>
+                    <>
+                      {profile.address.city}
+                      <br />
+                    </>
                   )}
                   {profile.address?.country || "Not set"}
                 </p>
               </div>
 
               <div className="flex justify-end gap-3">
-                <Button
-                  variant="default"
-                  onClick={() => router.push("/profile/requests")}
-                >
+                <Button variant="default" onClick={() => router.push("/profile/requests")}>
                   Request Profile Changes
                 </Button>
               </div>
