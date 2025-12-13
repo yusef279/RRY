@@ -1,6 +1,7 @@
 'use client'
 
 import { AuthPayload, UserRole } from '@/types/auth'
+import { Permission } from '@/types/permissions'
 
 export const TOKEN_KEY = 'hr_token'
 
@@ -34,13 +35,18 @@ export const decodeToken = (): AuthPayload | null => {
 
 export const getUserRole = (): UserRole | undefined => {
   const payload = decodeToken()
-  const role = payload?.role
-  return role
+  return payload?.role
 }
 
 export const isRoleAllowed = (role: UserRole | undefined, allowedRoles?: UserRole[]) => {
   if (!allowedRoles || allowedRoles.length === 0) return true
   return !!role && allowedRoles.includes(role)
+}
+
+/* NEW – fine-grained permission helper */
+export function hasPermission(user: AuthPayload | null, perm: Permission): boolean {
+  if (!user || !user.permissions) return false
+  return user.permissions.includes(perm)
 }
 
 /**
@@ -49,18 +55,20 @@ export const isRoleAllowed = (role: UserRole | undefined, allowedRoles?: UserRol
  * Returns null if not logged in or if the stored data is invalid.
  */
 export function getCurrentUser(): AuthPayload | null {
-  if (typeof window === 'undefined') return null;
+  if (typeof window === 'undefined') return null
 
-  const raw = localStorage.getItem('user');
-  if (!raw) return null;
+  const raw = localStorage.getItem('user')
+  if (!raw) return null
 
   try {
-    const parsed = JSON.parse(raw) as AuthPayload;
+    const parsed = JSON.parse(raw) as AuthPayload
     // Basic validation
-    if (!parsed.userId || !parsed.email) return null;
-    return parsed;
+    if (!parsed.userId || !parsed.email) return null
+    // Ensure permissions array exists
+    if (!parsed.permissions) parsed.permissions = []
+    return parsed
   } catch {
-    return null;
+    return null
   }
 }
 
@@ -68,21 +76,21 @@ export function getCurrentUser(): AuthPayload | null {
  * Checks if the current user has at least one of the required roles.
  */
 export function hasAnyRole(requiredRoles: string[]): boolean {
-  const user = getCurrentUser();
-  if (!user || !user.role) return false;
-  return requiredRoles.includes(user.role);
+  const user = getCurrentUser()
+  if (!user || !user.role) return false
+  return requiredRoles.includes(user.role)
 }
 
 /**
  * Clears all authentication data from localStorage.
  */
 export function clearAuth(): void {
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem('user');
-  localStorage.removeItem('access_token');
-  clearToken();
+  if (typeof window === 'undefined') return
+  localStorage.removeItem('user')
+  localStorage.removeItem('access_token')
+  clearToken()
   // Clean up legacy keys if they exist
-  localStorage.removeItem('systemRoles');
-  localStorage.removeItem('userEmail');
-  localStorage.removeItem('userName');
+  localStorage.removeItem('systemRoles')
+  localStorage.removeItem('userEmail')
+  localStorage.removeItem('userName')
 }

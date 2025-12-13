@@ -12,3 +12,4 @@ export enum SystemRole {
   JOB_CANDIDATE = 'Job Candidate',
   HR_ADMIN = 'HR Admin',
 }
+export type UserRole = SystemRole;
