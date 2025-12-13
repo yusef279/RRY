@@ -24,30 +24,55 @@ export default function TeamPage() {
   useEffect(() => {
     const fetchTeam = async () => {
       const user = getCurrentUser()
-      if (!user || !user.positionId) {
-        toast.error(
-          'No position assigned to your account. Cannot load team members.',
-        )
-        setLoading(false)
+
+      // Must have employeeId to load your profile
+      if (!user || !user.employeeId) {
+        router.push('/login')
         return
       }
 
       try {
-        // GET /employee-profile/manager/team?supervisorPositionId=...
+        // 1) Load MY profile to get my primaryPositionId (source of truth)
+        const meRes = await api.get(`/employee-profile/${user.employeeId}`)
+        const me: EmployeeProfile = meRes.data
+
+        const myPositionId =
+          typeof me.primaryPositionId === 'object'
+            ? (me.primaryPositionId as any)?._id
+            : me.primaryPositionId
+
+        if (!myPositionId) {
+          toast.error('No position assigned to your account. Cannot load team members.')
+          setTeam([])
+          return
+        }
+
+        // 2) Load direct reports using supervisorPositionId
         const res = await api.get('/employee-profile/manager/team', {
-          params: { supervisorPositionId: user.positionId },
+          params: { supervisorPositionId: myPositionId },
         })
+
         setTeam(res.data || [])
       } catch (error: any) {
-        if (error?.response?.status === 401) {
+        const status = error?.response?.status
+
+        if (status === 401) {
           router.push('/login')
           return
         }
+
+        if (status === 403) {
+          toast.error('Forbidden: your account does not have manager permissions to view team members.')
+          setTeam([])
+          return
+        }
+
         toast.error(error?.response?.data?.message || 'Failed to load team')
       } finally {
         setLoading(false)
       }
     }
+
     fetchTeam()
   }, [router])
 
@@ -93,13 +118,9 @@ export default function TeamPage() {
               <Clock3 className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xs uppercase text-muted-foreground">
-                On leave / suspended
-              </p>
+              <p className="text-xs uppercase text-muted-foreground">On leave / suspended</p>
               <p className="text-xl font-semibold">
-                {team.filter(
-                  (t) => t.status === 'ON_LEAVE' || t.status === 'SUSPENDED',
-                ).length}
+                {team.filter((t) => t.status === 'ON_LEAVE' || t.status === 'SUSPENDED').length}
               </p>
             </div>
           </CardContent>
@@ -110,9 +131,7 @@ export default function TeamPage() {
         <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <CardTitle>Direct reports</CardTitle>
-            <CardDescription>
-              Summary view without sensitive information.
-            </CardDescription>
+            <CardDescription>Summary view without sensitive information.</CardDescription>
           </div>
           <div className="flex w-full gap-2 sm:w-auto">
             <Input
@@ -131,9 +150,7 @@ export default function TeamPage() {
           {loading ? (
             <p className="text-sm text-muted-foreground">Loading team...</p>
           ) : team.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No direct reports found.
-            </p>
+            <p className="text-sm text-muted-foreground">No direct reports found.</p>
           ) : (
             <Table>
               <TableHeader>
@@ -145,35 +162,34 @@ export default function TeamPage() {
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
+
               <TableBody>
                 {filtered.map((member) => {
                   const name =
-                    [member.firstName, member.lastName]
-                      .filter(Boolean)
-                      .join(' ')
-                      .trim() ||
+                    [member.firstName, member.lastName].filter(Boolean).join(' ').trim() ||
                     member.fullName ||
                     'Employee'
 
                   const initials = name
                     .split(' ')
-                    .filter((part: string) => part.length > 0)
-                    .map((part: string) => part[0])
+                    .filter((part) => part.length > 0)
+                    .map((part) => part[0])
                     .join('')
                     .toUpperCase()
                     .slice(0, 2)
 
-                  // Extract department name (could be populated or just ID)
                   const departmentName =
                     typeof member.primaryDepartmentId === 'object'
-                      ? member.primaryDepartmentId.name
+                      ? (member.primaryDepartmentId as any)?.name ?? '-'
                       : member.department?.name || '-'
 
-                  // Extract position name (could be populated or just ID)
+                  // ✅ Position is title, not name
                   const positionName =
                     typeof member.primaryPositionId === 'object'
-                      ? member.primaryPositionId.name
-                      : member.position?.name || '-'
+                      ? ((member.primaryPositionId as any)?.title ??
+                        (member.primaryPositionId as any)?.code ??
+                        '-')
+                      : '-'
 
                   return (
                     <TableRow key={member._id || member.employeeNumber}>
@@ -193,16 +209,10 @@ export default function TeamPage() {
                       <TableCell>{positionName}</TableCell>
                       <TableCell>{departmentName}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {member.dateOfHire
-                          ? new Date(member.dateOfHire).toLocaleDateString()
-                          : '-'}
+                        {member.dateOfHire ? new Date(member.dateOfHire).toLocaleDateString() : '-'}
                       </TableCell>
                       <TableCell>
-                        {member.status ? (
-                          <Badge variant="secondary">{member.status}</Badge>
-                        ) : (
-                          '-'
-                        )}
+                        {member.status ? <Badge variant="secondary">{member.status}</Badge> : '-'}
                       </TableCell>
                     </TableRow>
                   )

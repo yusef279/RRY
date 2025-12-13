@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Building2, GitBranch } from "lucide-react";
 
@@ -27,21 +27,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type DepartmentStatus = "ACTIVE" | "INACTIVE";
 
@@ -56,12 +42,62 @@ type PositionStatus = "ACTIVE" | "INACTIVE";
 
 type Position = {
   _id?: string;
-  name: string;
+  name: string; // UI "Name" field (we map backend title -> this)
   code: string;
   departmentId: string;
   departmentName?: string;
   payGrade?: string;
   status?: PositionStatus;
+};
+
+// ---------- helpers ----------
+const safeStr = (v: any) => (v === undefined || v === null ? "" : String(v));
+
+const normalizeDepartment = (d: any): Department => {
+  const status: DepartmentStatus | undefined =
+    typeof d?.status === "string"
+      ? d.status
+      : typeof d?.isActive === "boolean"
+        ? d.isActive
+          ? "ACTIVE"
+          : "INACTIVE"
+        : undefined;
+
+  return {
+    _id: d?._id,
+    name: safeStr(d?.name),
+    code: safeStr(d?.code),
+    status,
+  };
+};
+
+const normalizePosition = (p: any): Position => {
+  const status: PositionStatus | undefined =
+    typeof p?.status === "string"
+      ? p.status
+      : typeof p?.isActive === "boolean"
+        ? p.isActive
+          ? "ACTIVE"
+          : "INACTIVE"
+        : undefined;
+
+  // backend uses title; frontend uses name
+  const name =
+    safeStr(p?.title) || safeStr(p?.name) || ""; // IMPORTANT: don't fallback to code anymore
+
+  return {
+    _id: p?._id,
+    name,
+    code: safeStr(p?.code),
+    departmentId: safeStr(p?.departmentId?._id ?? p?.departmentId),
+    departmentName:
+      safeStr(p?.departmentName ?? p?.department?.name) || undefined,
+    payGrade:
+      p?.payGrade !== undefined && p?.payGrade !== null
+        ? String(p.payGrade)
+        : undefined,
+    status,
+  };
 };
 
 export default function AdminOrgStructurePage() {
@@ -84,13 +120,16 @@ export default function AdminOrgStructurePage() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        // 🔁 Adjust these endpoints to your Nest controller paths
         const [deptRes, posRes] = await Promise.all([
           api.get("/organization-structure/departments"),
           api.get("/organization-structure/positions"),
         ]);
-        setDepartments(deptRes.data || []);
-        setPositions(posRes.data || []);
+
+        const dep = Array.isArray(deptRes.data) ? deptRes.data : [];
+        const pos = Array.isArray(posRes.data) ? posRes.data : [];
+
+        setDepartments(dep.map(normalizeDepartment));
+        setPositions(pos.map(normalizePosition));
       } catch (error: any) {
         console.error(error);
         toast.error(
@@ -113,16 +152,15 @@ export default function AdminOrgStructurePage() {
     return map;
   }, [departments]);
 
-  const handleCreateDepartment = async (
-    e: React.FormEvent<HTMLFormElement>,
-  ) => {
+  const handleCreateDepartment = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     try {
       const res = await api.post("/organization-structure/departments", {
         name: deptForm.name,
         code: deptForm.code,
       });
-      setDepartments((prev) => [...prev, res.data]);
+
+      setDepartments((prev) => [...prev, normalizeDepartment(res.data)]);
       setDeptForm({ name: "", code: "" });
       toast.success("Department created.");
     } catch (error: any) {
@@ -133,18 +171,18 @@ export default function AdminOrgStructurePage() {
     }
   };
 
-  const handleCreatePosition = async (
-    e: React.FormEvent<HTMLFormElement>,
-  ) => {
+  const handleCreatePosition = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     try {
+      // ✅ SEND title (backend expects title)
       const res = await api.post("/organization-structure/positions", {
-        name: positionForm.name,
+        title: positionForm.name, // <-- FIX
         code: positionForm.code,
         departmentId: positionForm.departmentId,
         payGrade: positionForm.payGrade || undefined,
       });
-      setPositions((prev) => [...prev, res.data]);
+
+      setPositions((prev) => [...prev, normalizePosition(res.data)]);
       setPositionForm({
         name: "",
         code: "",
@@ -165,10 +203,16 @@ export default function AdminOrgStructurePage() {
     try {
       const res = await api.patch(
         `/organization-structure/departments/${editingDept._id}`,
-        editingDept,
+        {
+          name: editingDept.name,
+          code: editingDept.code,
+        },
       );
+
+      const updated = normalizeDepartment(res.data);
+
       setDepartments((prev) =>
-        prev.map((d) => (d._id === editingDept._id ? res.data : d)),
+        prev.map((d) => (d._id === editingDept._id ? updated : d)),
       );
       setEditingDept(null);
       toast.success("Department updated.");
@@ -183,12 +227,21 @@ export default function AdminOrgStructurePage() {
   const handleSavePosition = async () => {
     if (!editingPos?._id) return;
     try {
+      // ✅ SEND title on update too
       const res = await api.patch(
         `/organization-structure/positions/${editingPos._id}`,
-        editingPos,
+        {
+          title: editingPos.name, // <-- FIX
+          code: editingPos.code,
+          departmentId: editingPos.departmentId,
+          payGrade: editingPos.payGrade || undefined,
+        },
       );
+
+      const updated = normalizePosition(res.data);
+
       setPositions((prev) =>
-        prev.map((p) => (p._id === editingPos._id ? res.data : p)),
+        prev.map((p) => (p._id === editingPos._id ? updated : p)),
       );
       setEditingPos(null);
       toast.success("Position updated.");
@@ -202,11 +255,10 @@ export default function AdminOrgStructurePage() {
 
   const handleDeactivatePosition = async (id: string) => {
     try {
-      await api.patch(`/organization-structure/positions/${id}/deactivate`);
+      // ✅ send {} body so dto exists in Nest
+      await api.patch(`/organization-structure/positions/${id}/deactivate`, {});
       setPositions((prev) =>
-        prev.map((p) =>
-          p._id === id ? { ...p, status: "INACTIVE" } : p,
-        ),
+        prev.map((p) => (p._id === id ? { ...p, status: "INACTIVE" } : p)),
       );
       toast.success("Position deactivated.");
     } catch (error: any) {
@@ -232,6 +284,7 @@ export default function AdminOrgStructurePage() {
             Define departments and positions used across the HR system.
           </CardDescription>
         </CardHeader>
+
         <CardContent>
           {loading ? (
             <p className="text-sm text-muted-foreground">
@@ -248,11 +301,9 @@ export default function AdminOrgStructurePage() {
                   <Building2 className="h-4 w-4 mr-2" />
                   Departments
                 </TabsTrigger>
-                <TabsTrigger value="positions">                  Positions
-                </TabsTrigger>
+                <TabsTrigger value="positions">Positions</TabsTrigger>
               </TabsList>
 
-              {/* Org Chart Tree View tab */}
               <TabsContent value="tree" className="pt-4">
                 <Card>
                   <CardHeader>
@@ -266,43 +317,30 @@ export default function AdminOrgStructurePage() {
                       <OrgTree
                         departments={departments}
                         positions={positions}
-                        onDepartmentClick={(dept) => {
-                          toast.info(`Department: ${dept.name}`);
-                        }}
-                        onPositionClick={(pos) => {
-                          toast.info(`Position: ${pos.name}`);
-                        }}
+                        onDepartmentClick={(dept) => toast.info(`Department: ${dept.name}`)}
+                        onPositionClick={(pos) => toast.info(`Position: ${pos.name}`)}
                       />
                     </ScrollArea>
                   </CardContent>
                 </Card>
               </TabsContent>
 
-              {/* Departments tab */}
               <TabsContent value="departments" className="pt-4">
                 <div className="grid gap-6 lg:grid-cols-[360px,1fr]">
                   <Card>
                     <CardHeader>
-                      <CardTitle className="text-base">
-                        Create department
-                      </CardTitle>
+                      <CardTitle className="text-base">Create department</CardTitle>
                       <CardDescription>
-                        Add a new department record.
+                        Add a new department to your organization.
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <form
-                        className="space-y-3"
-                        onSubmit={handleCreateDepartment}
-                      >
+                      <form className="space-y-3" onSubmit={handleCreateDepartment}>
                         <Input
                           placeholder="Name"
                           value={deptForm.name}
                           onChange={(e) =>
-                            setDeptForm((prev) => ({
-                              ...prev,
-                              name: e.target.value,
-                            }))
+                            setDeptForm((prev) => ({ ...prev, name: e.target.value }))
                           }
                           required
                         />
@@ -310,10 +348,7 @@ export default function AdminOrgStructurePage() {
                           placeholder="Code"
                           value={deptForm.code}
                           onChange={(e) =>
-                            setDeptForm((prev) => ({
-                              ...prev,
-                              code: e.target.value,
-                            }))
+                            setDeptForm((prev) => ({ ...prev, code: e.target.value }))
                           }
                           required
                         />
@@ -331,29 +366,24 @@ export default function AdminOrgStructurePage() {
                           <TableHead>Name</TableHead>
                           <TableHead>Code</TableHead>
                           <TableHead>Status</TableHead>
-                          <TableHead className="text-right">
-                            Actions
-                          </TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {departments.map((dept) => (
                           <TableRow key={dept._id ?? dept.code}>
-                            <TableCell>{dept.name}</TableCell>
-                            <TableCell>{dept.code}</TableCell>
+                            <TableCell>{dept.name || "—"}</TableCell>
+                            <TableCell>{dept.code || "—"}</TableCell>
                             <TableCell>
                               {dept.status ? (
-                                <Badge
-                                  variant="secondary"
-                                  className="uppercase"
-                                >
+                                <Badge variant="secondary" className="uppercase">
                                   {dept.status}
                                 </Badge>
                               ) : (
                                 "—"
                               )}
                             </TableCell>
-                            <TableCell className="text-right">
+                            <TableCell className="flex items-center justify-end gap-2">
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -374,31 +404,19 @@ export default function AdminOrgStructurePage() {
                     <p className="mb-3 text-sm font-medium">Edit department</p>
                     <div className="grid gap-3 md:grid-cols-3">
                       <Input
-                        value={editingDept.name}
+                        value={editingDept.name ?? ""}
                         onChange={(e) =>
-                          setEditingDept((prev) =>
-                            prev
-                              ? { ...prev, name: e.target.value }
-                              : prev,
-                          )
+                          setEditingDept((prev) => (prev ? { ...prev, name: e.target.value } : prev))
                         }
                       />
                       <Input
-                        value={editingDept.code}
+                        value={editingDept.code ?? ""}
                         onChange={(e) =>
-                          setEditingDept((prev) =>
-                            prev
-                              ? { ...prev, code: e.target.value }
-                              : prev,
-                          )
+                          setEditingDept((prev) => (prev ? { ...prev, code: e.target.value } : prev))
                         }
                       />
-                      <div className="flex gap-2 justify-end">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setEditingDept(null)}
-                        >
+                      <div className="col-span-full flex justify-end gap-2">
+                        <Button variant="outline" size="sm" onClick={() => setEditingDept(null)}>
                           Cancel
                         </Button>
                         <Button size="sm" onClick={handleSaveDepartment}>
@@ -410,31 +428,22 @@ export default function AdminOrgStructurePage() {
                 )}
               </TabsContent>
 
-              {/* Positions tab */}
               <TabsContent value="positions" className="pt-4">
                 <div className="grid gap-6 lg:grid-cols-[360px,1fr]">
                   <Card>
                     <CardHeader>
-                      <CardTitle className="text-base">
-                        Create position
-                      </CardTitle>
+                      <CardTitle className="text-base">Create position</CardTitle>
                       <CardDescription>
                         Assign the position to a department.
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <form
-                        className="space-y-3"
-                        onSubmit={handleCreatePosition}
-                      >
+                      <form className="space-y-3" onSubmit={handleCreatePosition}>
                         <Input
                           placeholder="Name"
                           value={positionForm.name}
                           onChange={(e) =>
-                            setPositionForm((prev) => ({
-                              ...prev,
-                              name: e.target.value,
-                            }))
+                            setPositionForm((prev) => ({ ...prev, name: e.target.value }))
                           }
                           required
                         />
@@ -442,10 +451,7 @@ export default function AdminOrgStructurePage() {
                           placeholder="Code"
                           value={positionForm.code}
                           onChange={(e) =>
-                            setPositionForm((prev) => ({
-                              ...prev,
-                              code: e.target.value,
-                            }))
+                            setPositionForm((prev) => ({ ...prev, code: e.target.value }))
                           }
                           required
                         />
@@ -471,10 +477,7 @@ export default function AdminOrgStructurePage() {
                           placeholder="Pay grade (optional)"
                           value={positionForm.payGrade}
                           onChange={(e) =>
-                            setPositionForm((prev) => ({
-                              ...prev,
-                              payGrade: e.target.value,
-                            }))
+                            setPositionForm((prev) => ({ ...prev, payGrade: e.target.value }))
                           }
                         />
                         <Button type="submit" className="w-full">
@@ -493,28 +496,21 @@ export default function AdminOrgStructurePage() {
                           <TableHead>Department</TableHead>
                           <TableHead>Pay grade</TableHead>
                           <TableHead>Status</TableHead>
-                          <TableHead className="text-right">
-                            Actions
-                          </TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {positions.map((pos) => (
                           <TableRow key={pos._id ?? pos.code}>
-                            <TableCell>{pos.name}</TableCell>
-                            <TableCell>{pos.code}</TableCell>
+                            <TableCell>{pos.name || "—"}</TableCell>
+                            <TableCell>{pos.code || "—"}</TableCell>
                             <TableCell>
-                              {pos.departmentName ||
-                                departmentMap[pos.departmentId] ||
-                                "—"}
+                              {pos.departmentName || departmentMap[pos.departmentId] || "—"}
                             </TableCell>
                             <TableCell>{pos.payGrade || "—"}</TableCell>
                             <TableCell>
                               {pos.status ? (
-                                <Badge
-                                  variant="secondary"
-                                  className="uppercase"
-                                >
+                                <Badge variant="secondary" className="uppercase">
                                   {pos.status}
                                 </Badge>
                               ) : (
@@ -525,16 +521,22 @@ export default function AdminOrgStructurePage() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => setEditingPos(pos)}
+                                onClick={() =>
+                                  setEditingPos({
+                                    ...pos,
+                                    name: safeStr(pos.name), // controlled
+                                    code: safeStr(pos.code),
+                                    departmentId: safeStr(pos.departmentId),
+                                    payGrade: safeStr(pos.payGrade),
+                                  })
+                                }
                               >
                                 Edit
                               </Button>
                               <Button
                                 variant="destructive"
                                 size="sm"
-                                onClick={() =>
-                                  setDeactivatePosId(pos._id || "")
-                                }
+                                onClick={() => setDeactivatePosId(pos._id || "")}
                                 disabled={pos.status === "INACTIVE"}
                               >
                                 Deactivate
@@ -552,32 +554,22 @@ export default function AdminOrgStructurePage() {
                     <p className="mb-3 text-sm font-medium">Edit position</p>
                     <div className="grid gap-3 md:grid-cols-4">
                       <Input
-                        value={editingPos.name}
+                        value={editingPos.name ?? ""}
                         onChange={(e) =>
-                          setEditingPos((prev) =>
-                            prev
-                              ? { ...prev, name: e.target.value }
-                              : prev,
-                          )
+                          setEditingPos((prev) => (prev ? { ...prev, name: e.target.value } : prev))
                         }
                       />
                       <Input
-                        value={editingPos.code}
+                        value={editingPos.code ?? ""}
                         onChange={(e) =>
-                          setEditingPos((prev) =>
-                            prev
-                              ? { ...prev, code: e.target.value }
-                              : prev,
-                          )
+                          setEditingPos((prev) => (prev ? { ...prev, code: e.target.value } : prev))
                         }
                       />
                       <select
-                        value={editingPos.departmentId}
+                        value={editingPos.departmentId ?? ""}
                         onChange={(e) =>
                           setEditingPos((prev) =>
-                            prev
-                              ? { ...prev, departmentId: e.target.value }
-                              : prev,
+                            prev ? { ...prev, departmentId: e.target.value } : prev,
                           )
                         }
                         className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
@@ -589,21 +581,15 @@ export default function AdminOrgStructurePage() {
                         ))}
                       </select>
                       <Input
-                        value={editingPos.payGrade || ""}
+                        value={editingPos.payGrade ?? ""}
                         onChange={(e) =>
                           setEditingPos((prev) =>
-                            prev
-                              ? { ...prev, payGrade: e.target.value }
-                              : prev,
+                            prev ? { ...prev, payGrade: e.target.value } : prev,
                           )
                         }
                       />
                       <div className="col-span-full flex justify-end gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setEditingPos(null)}
-                        >
+                        <Button variant="outline" size="sm" onClick={() => setEditingPos(null)}>
                           Cancel
                         </Button>
                         <Button size="sm" onClick={handleSavePosition}>
@@ -616,28 +602,18 @@ export default function AdminOrgStructurePage() {
 
                 {deactivatePosId && (
                   <div className="mt-4 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm">
-                    <p className="mb-2 font-medium">
-                      Deactivate this position?
-                    </p>
+                    <p className="mb-2 font-medium">Deactivate this position?</p>
                     <p className="mb-3 text-xs text-muted-foreground">
-                      This will mark the position as inactive but keep its
-                      history in the system.
+                      This will mark the position as inactive but keep its history in the system.
                     </p>
                     <div className="flex justify-end gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setDeactivatePosId(null)}
-                      >
+                      <Button variant="outline" size="sm" onClick={() => setDeactivatePosId(null)}>
                         Cancel
                       </Button>
                       <Button
                         size="sm"
                         variant="destructive"
-                        onClick={() =>
-                          deactivatePosId &&
-                          handleDeactivatePosition(deactivatePosId)
-                        }
+                        onClick={() => deactivatePosId && handleDeactivatePosition(deactivatePosId)}
                       >
                         Deactivate
                       </Button>
