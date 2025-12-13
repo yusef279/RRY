@@ -198,7 +198,7 @@ export class EmployeeProfileService {
     const changeRequest = await this.changeRequestModel.create({
       requestId,
       employeeProfileId: employee._id,
-      requestDescription: dto.requestDescription,  // ✅ Correct field
+      requestDescription: dto.requestDescription, // ✅ store the description blob
       status: ProfileChangeStatus.PENDING,
       submittedAt: new Date(),
     });
@@ -258,6 +258,7 @@ export class EmployeeProfileService {
   // ---------- Phase III: HR/Admin Processing & Master Data ----------
 
   async getPendingChangeRequests() {
+    // still used by /employee-profile/admin/change-requests/pending
     return this.changeRequestModel
       .find({ status: ProfileChangeStatus.PENDING })
       .sort({ submittedAt: 1 })
@@ -268,9 +269,15 @@ export class EmployeeProfileService {
     requestId: string,
     dto: ReviewChangeRequestDto,
   ) {
-    const request = await this.changeRequestModel
+    // 🔍 Try by business requestId (EPCR-...) first
+    let request = await this.changeRequestModel
       .findOne({ requestId })
       .exec();
+
+    // 🔁 If that fails and it looks like an ObjectId, try _id
+    if (!request && Types.ObjectId.isValid(requestId)) {
+      request = await this.changeRequestModel.findById(requestId).exec();
+    }
 
     if (!request) {
       throw new NotFoundException('Change request not found');
@@ -280,20 +287,100 @@ export class EmployeeProfileService {
       throw new BadRequestException('Change request already processed');
     }
 
+    // 💡 Accept both { decision } and { status } from body
+    const decision: ProfileChangeStatus =
+      (dto as any).decision ?? (dto as any).status;
+
     if (
-      dto.decision !== ProfileChangeStatus.APPROVED &&
-      dto.decision !== ProfileChangeStatus.REJECTED
+      decision !== ProfileChangeStatus.APPROVED &&
+      decision !== ProfileChangeStatus.REJECTED
     ) {
       throw new BadRequestException(
         'Decision must be APPROVED or REJECTED',
       );
     }
 
-    request.status = dto.decision;
+    // ✅ If APPROVED, apply the change to the employee profile
+    if (decision === ProfileChangeStatus.APPROVED) {
+      const employee = await this.employeeProfileModel
+        .findById(request.employeeProfileId)
+        .exec();
+
+      if (!employee) {
+        throw new NotFoundException(
+          'Employee profile not found for this request',
+        );
+      }
+
+      const parsed = this.parseRequestDescription(
+        (request as any).requestDescription,
+      );
+
+      const fieldName = parsed.fieldName?.toLowerCase();
+      const newValue = parsed.requestedValue;
+
+      if (fieldName && newValue) {
+        // 🔁 Map human label → actual EmployeeProfile property
+
+        // Email
+        if (fieldName.includes('personal email')) {
+          (employee as any).personalEmail = newValue;
+        } else if (fieldName.includes('work email')) {
+          employee.workEmail = newValue;
+        } else if (fieldName.includes('email')) {
+          // generic "Email"
+          (employee as any).personalEmail = newValue;
+        }
+
+        // Phone
+        else if (fieldName.includes('home phone')) {
+          (employee as any).homePhone = newValue;
+        } else if (
+          fieldName.includes('mobile') ||
+          fieldName.includes('phone')
+        ) {
+          employee.mobilePhone = newValue;
+        }
+
+        // Bank details
+        else if (fieldName.includes('bank name')) {
+          (employee as any).bankName = newValue;
+        } else if (
+          fieldName.includes('bank account') ||
+          fieldName.includes('iban')
+        ) {
+          (employee as any).bankAccountNumber = newValue;
+        }
+
+        // Address (simple: put in line1)
+        else if (fieldName.includes('address')) {
+          (employee as any).address = {
+            ...(employee as any).address,
+            line1: newValue,
+          };
+        }
+
+        // Biography
+        else if (fieldName.includes('bio')) {
+          employee.biography = newValue;
+        }
+
+        // you can add more mappings later if needed
+
+        await employee.save();
+      }
+    }
+
+    // 💬 Accept both { comment } and { reviewComment }
+    const comment =
+      (dto as any).comment ?? (dto as any).reviewComment;
+
+    // ✅ Always update request status + audit data
+    request.status = decision;
     request.processedAt = new Date();
 
-    if (dto.comment) {
-      request.reason = dto.comment;
+    if (comment) {
+      request.reason = comment;
     }
 
     await request.save();
@@ -405,7 +492,7 @@ export class EmployeeProfileService {
         status: ProfileChangeStatus.APPROVED,
         submittedAt: new Date(),
         processedAt: new Date(),
-      });
+      } as any);
     }
 
     return updated;
@@ -476,5 +563,38 @@ export class EmployeeProfileService {
     await employee.save();
 
     return employee;
+  }
+
+  // ---------- helpers ----------
+
+
+  
+
+  private parseRequestDescription(desc?: string) {
+    if (!desc) {
+      return {
+        fieldName: undefined,
+        currentValue: undefined,
+        requestedValue: undefined,
+        reason: undefined,
+      };
+    }
+
+    const lines = desc
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    const get = (label: string) => {
+      const line = lines.find((l) => l.startsWith(label));
+      return line ? line.slice(label.length).trim() : undefined;
+    };
+
+    return {
+      fieldName: get('Field:'),
+      currentValue: get('From:'),
+      requestedValue: get('To:'),
+      reason: get('Reason:'),
+    };
   }
 }
