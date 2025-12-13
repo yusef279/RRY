@@ -9,6 +9,8 @@ import {
   Query,
   UseGuards,
   Req,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { PerformanceService } from './performance.service';
 import {
@@ -21,19 +23,20 @@ import {
   RaiseDisputeDto,
   ResolveDisputeDto,
 } from './dto/performance.dto';
-// import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-// import { RolesGuard } from '../auth/guards/roles.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Permissions } from '../auth/decorators/roles.decorators';
 import { Permission } from '../auth/permissions.constant';
 import { AuthUser } from '../auth/auth-user.interface';
-import { Request } from 'express';
+import type { Request } from 'express';
 
 @Controller('performance')
-//@UseGuards(JwtAuthGuard, RolesGuard)
+//@UseGuards(JwtAuthGuard, RolesGuard) 
 export class PerformanceController {
   constructor(private readonly service: PerformanceService) {}
 
-  /* ----------  Templates (REQ-PP-01)  ---------- */
+  /* =========================================================
+      Templates (Step 1 – HR Manager)
+  ========================================================= */
   @Post('templates')
   @Permissions(Permission.MANAGE_APPRAISALS)
   createTemplate(@Body() dto: CreateTemplateDto) {
@@ -64,7 +67,9 @@ export class PerformanceController {
     return this.service.deactivateTemplate(id);
   }
 
-  /* ----------  Cycles (REQ-PP-02)  ---------- */
+  /* =========================================================
+      Cycles (Step 2 – HR Manager)
+  ========================================================= */
   @Post('cycles')
   @Permissions(Permission.MANAGE_APPRAISALS)
   createCycle(@Body() dto: CreateCycleDto) {
@@ -95,31 +100,37 @@ export class PerformanceController {
     return this.service.closeCycle(id);
   }
 
-  /* ----------  Assignments (REQ-PP-05, REQ-PP-13)  ---------- */
+  @Post('cycles/:cycleId/reminders')
+  @Permissions(Permission.MANAGE_APPRAISALS)
+  sendReminders(@Param('cycleId') cycleId: string) {
+    return this.service.sendPendingReminders(cycleId);
+  }
+
+  /* =========================================================
+      Assignments (Step 3A – HR Employee / Line Manager)
+  ========================================================= */
   @Post('assignments/bulk')
   @Permissions(Permission.MANAGE_APPRAISALS)
   bulkAssign(@Body() dto: BulkAssignDto) {
     return this.service.bulkAssign(dto);
   }
 
-  /**  USER-SCOPED  */
   @Get('assignments/manager/:managerId')
   @Permissions(Permission.CONDUCT_APPRAISALS)
   getAssignmentsForManager(
     @Param('managerId') managerId: string,
     @Req() req: Request & { user: AuthUser },
   ) {
-    return this.service.getAssignmentsForManager(managerId.toString(), req.user);
+    return this.service.getAssignmentsForManager(managerId, req.user);
   }
 
-  /**  USER-SCOPED  */
   @Get('assignments/employee/:employeeId')
   @Permissions(Permission.VIEW_OWN_APPRAISAL)
   getAssignmentsForEmployee(
     @Param('employeeId') employeeId: string,
     @Req() req: Request & { user: AuthUser },
   ) {
-    return this.service.getAssignmentsForEmployee(employeeId.toString(), req.user);
+    return this.service.getAssignmentsForEmployee(employeeId, req.user);
   }
 
   @Get('assignments/:id')
@@ -128,8 +139,9 @@ export class PerformanceController {
     return this.service.getAssignmentById(id);
   }
 
-  /* ----------  Records (REQ-AE-03, REQ-AE-04)  ---------- */
-  /**  USER-SCOPED  */
+  /* =========================================================
+      Records (Step 3B / 5 – Manager / Employee)
+  ========================================================= */
   @Post('records')
   @Permissions(Permission.CONDUCT_APPRAISALS)
   submitRecord(@Body() dto: SubmitRecordDto, @Req() req: Request & { user: AuthUser }) {
@@ -148,50 +160,46 @@ export class PerformanceController {
     return this.service.publishRecord(id, body.hrPublishedById?.toString());
   }
 
-  /**  USER-SCOPED  */
-@Patch('records/:id/acknowledge')
-@Permissions(Permission.VIEW_OWN_APPRAISAL)
-acknowledge(
-  @Param('id') id: string,
-  @Req() req: Request & { user: AuthUser },
-  @Body() body: AcknowledgeRecordDto,
-) {
-  return this.service.acknowledgeRecord(id, body.employeeId.toString(), body.comment, req.user);
-}
-  /* ----------  Disputes (REQ-AE-07, REQ-OD-07)  ---------- */
-  /**  USER-SCOPED  */
-  @Post('disputes')
+  @Patch('records/:id/acknowledge')
   @Permissions(Permission.VIEW_OWN_APPRAISAL)
+  acknowledge(
+    @Param('id') id: string,
+    @Req() req: Request & { user: AuthUser },
+    @Body() body: AcknowledgeRecordDto,
+  ) {
+    return this.service.acknowledgeRecord(id, body.employeeId.toString(), body.comment, req.user);
+  }
+
+  /* =========================================================
+      Disputes (Step 6 / 7 – Employee / HR Manager)
+  ========================================================= */
+  @Post('disputes')
+  @Permissions(Permission.RAISE_DISPUTE)
   raiseDispute(@Body() dto: RaiseDisputeDto, @Req() req: Request & { user: AuthUser }) {
     return this.service.raiseDispute(dto, req.user);
   }
 
   @Get('disputes')
-  @Permissions(Permission.MANAGE_APPRAISALS)
+  @Permissions(Permission.RESOLVE_DISPUTE)
   listDisputes(@Query() query: any) {
     return this.service.listDisputes(query);
   }
 
   @Get('disputes/:id')
-  @Permissions(Permission.MANAGE_APPRAISALS, Permission.VIEW_OWN_APPRAISAL)
+  @Permissions(Permission.RESOLVE_DISPUTE, Permission.VIEW_OWN_APPRAISAL)
   getDispute(@Param('id') id: string) {
     return this.service.getDisputeById(id);
   }
 
   @Patch('disputes/:id/resolve')
-  @Permissions(Permission.MANAGE_APPRAISALS)
+  @Permissions(Permission.RESOLVE_DISPUTE)
   resolveDispute(@Param('id') id: string, @Body() body: ResolveDisputeDto) {
     return this.service.resolveDispute(id, body);
   }
 
-  /* ----------  Reminders / Reports / Dashboard  ---------- */
-  @Post('cycles/:cycleId/reminders')
-  @Permissions(Permission.MANAGE_APPRAISALS)
-  sendReminders(@Param('cycleId') cycleId: string) {
-    return this.service.sendPendingReminders(cycleId);
-  }
-
-  /**  USER-SCOPED  */
+  /* =========================================================
+      Reports / Dashboard (Step 4 – HR Manager)
+  ========================================================= */
   @Get('employees/:employeeId/history')
   @Permissions(Permission.VIEW_OWN_APPRAISAL, Permission.MANAGE_APPRAISALS)
   getEmployeeHistory(
@@ -202,7 +210,6 @@ acknowledge(
     return this.service.getEmployeeAppraisalHistory(employeeId, limit, req.user);
   }
 
-  /**  USER-SCOPED  */
   @Get('employees/:employeeId/trends')
   @Permissions(Permission.VIEW_OWN_APPRAISAL, Permission.MANAGE_APPRAISALS)
   getEmployeeTrends(@Param('employeeId') employeeId: string, @Req() req: Request & { user: AuthUser }) {
@@ -210,13 +217,13 @@ acknowledge(
   }
 
   @Get('reports/cycle/:cycleId')
-  @Permissions(Permission.MANAGE_APPRAISALS)
+  @Permissions(Permission.EXPORT_APPRAISAL_REPORTS)
   getCycleReport(@Param('cycleId') cycleId: string) {
     return this.service.generateCycleReport(cycleId);
   }
 
   @Get('reports/department/:departmentId')
-  @Permissions(Permission.MANAGE_APPRAISALS)
+  @Permissions(Permission.EXPORT_APPRAISAL_REPORTS)
   getDepartmentReport(
     @Param('departmentId') departmentId: string,
     @Query('cycleId') cycleId?: string,
@@ -225,7 +232,7 @@ acknowledge(
   }
 
   @Get('reports/export')
-  @Permissions(Permission.MANAGE_APPRAISALS)
+  @Permissions(Permission.EXPORT_APPRAISAL_REPORTS)
   exportRecords(
     @Query('cycleId') cycleId?: string,
     @Query('format') format?: 'json' | 'csv',
@@ -234,13 +241,13 @@ acknowledge(
   }
 
   @Get('dashboard/stats')
-  @Permissions(Permission.MANAGE_APPRAISALS, Permission.VIEW_OWN_APPRAISAL)
+  @Permissions(Permission.VIEW_APPRAISAL_DASHBOARD)
   getDashboardStats(@Query('departmentId') departmentId?: string) {
     return this.service.dashboardStats(departmentId);
   }
 
   @Get('dashboard/department-progress')
-  @Permissions(Permission.MANAGE_APPRAISALS)
+  @Permissions(Permission.VIEW_APPRAISAL_DASHBOARD)
   getDepartmentProgress(@Query('cycleId') cycleId?: string) {
     return this.service.getDepartmentProgress(cycleId);
   }

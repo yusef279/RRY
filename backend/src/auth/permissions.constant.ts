@@ -9,9 +9,13 @@ export enum Permission {
   VIEW_ORG_STRUCTURE = 'VIEW_ORG_STRUCTURE',
 
   // Performance Module
-  MANAGE_APPRAISALS = 'MANAGE_APPRAISALS',
-  CONDUCT_APPRAISALS = 'CONDUCT_APPRAISALS',
-  VIEW_OWN_APPRAISAL = 'VIEW_OWN_APPRAISAL',
+  MANAGE_APPRAISALS = 'MANAGE_APPRAISALS',               // steps 1, 2, 4, 7
+  CONDUCT_APPRAISALS = 'CONDUCT_APPRAISALS',             // step 3B
+  VIEW_OWN_APPRAISAL = 'VIEW_OWN_APPRAISAL',             // step 5
+  RAISE_DISPUTE = 'RAISE_DISPUTE',                       // step 6
+  RESOLVE_DISPUTE = 'RESOLVE_DISPUTE',                   // step 7
+  VIEW_APPRAISAL_DASHBOARD = 'VIEW_APPRAISAL_DASHBOARD', // step 4  (consolidated view)
+  EXPORT_APPRAISAL_REPORTS = 'EXPORT_APPRAISAL_REPORTS', // step 7  (final reports)
 
   // Time Management Module
   MANAGE_ATTENDANCE = 'MANAGE_ATTENDANCE',
@@ -42,6 +46,9 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     Permission.MANAGE_ALL_PROFILES,
     Permission.VIEW_ORG_STRUCTURE,
     Permission.MANAGE_APPRAISALS,
+    Permission.VIEW_APPRAISAL_DASHBOARD,
+    Permission.EXPORT_APPRAISAL_REPORTS,
+    Permission.RESOLVE_DISPUTE,
     Permission.MANAGE_ATTENDANCE,
     Permission.MANAGE_RECRUITMENT,
     Permission.MANAGE_LEAVES,
@@ -51,8 +58,15 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
   [SystemRole.HR_ADMIN]: [
     Permission.MANAGE_ALL_PROFILES,
     Permission.VIEW_ORG_STRUCTURE,
+    // Permission.MANAGE_APPRAISALS,
+    // Permission.VIEW_APPRAISAL_DASHBOARD,
+    // Permission.VIEW_OWN_APPRAISAL,
+    // Permission.EXPORT_APPRAISAL_REPORTS,
+    // Permission.RESOLVE_DISPUTE,
     Permission.MANAGE_ATTENDANCE,
     Permission.MANAGE_LEAVES,
+
+
   ],
 
   [SystemRole.HR_EMPLOYEE]: [
@@ -60,6 +74,8 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     Permission.MANAGE_ALL_PROFILES,
     Permission.VIEW_ORG_STRUCTURE,
     Permission.VIEW_APPLICATIONS,
+    Permission.MANAGE_APPRAISALS,              
+    Permission.VIEW_APPRAISAL_DASHBOARD,       
   ],
 
   [SystemRole.PAYROLL_SPECIALIST]: [
@@ -100,6 +116,7 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     Permission.EDIT_OWN_PROFILE,
     Permission.VIEW_ORG_STRUCTURE,
     Permission.VIEW_OWN_APPRAISAL,
+    Permission.RAISE_DISPUTE,
     Permission.CLOCK_IN_OUT,
     Permission.REQUEST_LEAVE,
     Permission.VIEW_OWN_PAYSLIP,
