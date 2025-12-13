@@ -11,9 +11,9 @@ import {
   ForbiddenException,
   UseInterceptors,
   UploadedFile,
-  UploadedFiles,
+  BadRequestException,
 } from '@nestjs/common';
-import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 
@@ -39,6 +39,10 @@ import type { AuthUser } from '../auth';
 export class EmployeeProfileController {
   constructor(private readonly employeeProfileService: EmployeeProfileService) {}
 
+  /* =========================================================
+      Phase III: HR/Admin Processing & Master Data
+     ========================================================= */
+
   /* ---------- Admin: Create Employee ---------- */
   @Post('admin')
   @UseGuards(PermissionsGuard)
@@ -47,72 +51,6 @@ export class EmployeeProfileController {
     return this.employeeProfileService.createEmployeeProfile(dto);
   }
 
-  /* ---------- Phase I: Self-Service ---------- */
-  @Get(':id')
-  @UseGuards(PermissionsGuard)
-  @Permissions(Permission.EDIT_OWN_PROFILE) // minimal permission; owner scoping below
-  getEmployeeProfile(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    if (user.employeeId !== id && !this.isHrOrAdmin(user))
-      throw new ForbiddenException();
-    return this.employeeProfileService.getEmployeeProfileById(id);
-  }
-
-  @Patch(':id/self-service')
-  @UseGuards(PermissionsGuard)
-  @Permissions(Permission.EDIT_OWN_PROFILE)
-  updateSelfServiceProfile(
-    @Param('id') id: string,
-    @Body() dto: UpdateSelfServiceProfileDto,
-    @CurrentUser() user: AuthUser,
-  ) {
-    if (user.employeeId !== id)
-      throw new ForbiddenException('You can only edit your own profile');
-    return this.employeeProfileService.updateSelfServiceProfile(id, dto);
-  }
-
-  @Post(':id/change-requests')
-  @UseGuards(PermissionsGuard)
-  @Permissions(Permission.EDIT_OWN_PROFILE)
-  createChangeRequestForEmployee(
-    @Param('id') id: string,
-    @Body() dto: CreateEmployeeProfileChangeRequestDto,
-    @CurrentUser() user: AuthUser,
-  ) {
-    if (user.employeeId !== id)
-      throw new ForbiddenException('You can only request changes for yourself');
-    return this.employeeProfileService.createChangeRequest(id, dto);
-  }
-
-  @Get(':id/change-requests')
-  @UseGuards(PermissionsGuard)
-  @Permissions(Permission.EDIT_OWN_PROFILE)
-  getMyChangeRequests(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    if (user.employeeId !== id && !this.isHrOrAdmin(user))
-      throw new ForbiddenException();
-    return this.employeeProfileService.getMyChangeRequests(id);
-  }
-
-  /* ---------- Phase II: Manager Insight ---------- */
-  @Get('manager/team')
-  @UseGuards(PermissionsGuard)
-  @Permissions(Permission.VIEW_TEAM_PROFILES)
-  getManagerTeamBrief(
-    @Query('supervisorPositionId') supervisorPositionId: string,
-    @CurrentUser() user: AuthUser,
-  ) {
-    if (
-      user.positionId !== supervisorPositionId &&
-      !this.isHrOrAdmin(user)
-    )
-      throw new ForbiddenException(
-        'You can only view your own direct-report team',
-      );
-    return this.employeeProfileService.getTeamBriefBySupervisorPosition(
-      supervisorPositionId,
-    );
-  }
-
-  /* ---------- Phase III: HR/Admin Processing & Master Data ---------- */
   @Get('admin/change-requests/pending')
   @UseGuards(PermissionsGuard)
   @Permissions(Permission.MANAGE_ALL_PROFILES)
@@ -150,10 +88,7 @@ export class EmployeeProfileController {
   @Patch('admin/:id/deactivate')
   @UseGuards(PermissionsGuard)
   @Permissions(Permission.MANAGE_ALL_PROFILES)
-  deactivateEmployeeProfile(
-    @Param('id') id: string,
-    @Body('reason') reason?: string,
-  ) {
+  deactivateEmployeeProfile(@Param('id') id: string, @Body('reason') reason?: string) {
     return this.employeeProfileService.deactivateEmployeeProfile(id, reason);
   }
 
@@ -197,16 +132,94 @@ export class EmployeeProfileController {
     @UploadedFile() file: Express.Multer.File,
   ) {
     if (!file) {
-      throw new ForbiddenException('No file uploaded');
+      throw new BadRequestException('No file uploaded');
     }
     const fileUrl = `/uploads/profile-pictures/${file.filename}`;
     return this.employeeProfileService.updateProfilePicture(id, fileUrl);
   }
 
+  /* =========================================================
+      Phase II: Manager Insight
+     ========================================================= */
+
+  @Get('manager/team')
+  @UseGuards(PermissionsGuard)
+  @Permissions(Permission.VIEW_TEAM_PROFILES)
+  getManagerTeamBrief(
+    @Query('supervisorPositionId') supervisorPositionId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    if (user.positionId !== supervisorPositionId && !this.isHrOrAdmin(user)) {
+      throw new ForbiddenException(
+        'You can only view your own direct-report team',
+      );
+    }
+
+    return this.employeeProfileService.getTeamBriefBySupervisorPosition(
+      supervisorPositionId,
+    );
+  }
+
+  /* =========================================================
+      Phase I: Self-Service
+     ========================================================= */
+
+  /**
+   * ✅ FIX:
+   * Viewing a profile should NOT require EDIT_OWN_PROFILE.
+   * - Any logged-in user can view their own profile
+   * - HR/Admin can view other employees
+   */
+  @Get(':id')
+  getEmployeeProfile(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    if (user.employeeId !== id && !this.isHrOrAdmin(user)) {
+      throw new ForbiddenException();
+    }
+    return this.employeeProfileService.getEmployeeProfileById(id);
+  }
+
+  @Patch(':id/self-service')
+  @UseGuards(PermissionsGuard)
+  @Permissions(Permission.EDIT_OWN_PROFILE)
+  updateSelfServiceProfile(
+    @Param('id') id: string,
+    @Body() dto: UpdateSelfServiceProfileDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    if (user.employeeId !== id) {
+      throw new ForbiddenException('You can only edit your own profile');
+    }
+    return this.employeeProfileService.updateSelfServiceProfile(id, dto);
+  }
+
+  @Post(':id/change-requests')
+  @UseGuards(PermissionsGuard)
+  @Permissions(Permission.EDIT_OWN_PROFILE)
+  createChangeRequestForEmployee(
+    @Param('id') id: string,
+    @Body() dto: CreateEmployeeProfileChangeRequestDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    if (user.employeeId !== id) {
+      throw new ForbiddenException('You can only request changes for yourself');
+    }
+    return this.employeeProfileService.createChangeRequest(id, dto);
+  }
+
+  @Get(':id/change-requests')
+  @UseGuards(PermissionsGuard)
+  @Permissions(Permission.EDIT_OWN_PROFILE)
+  getMyChangeRequests(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    if (user.employeeId !== id && !this.isHrOrAdmin(user)) {
+      throw new ForbiddenException();
+    }
+    return this.employeeProfileService.getMyChangeRequests(id);
+  }
 
   /* =========================================================
       helpers
      ========================================================= */
+
   private isHrOrAdmin(user: AuthUser): boolean {
     return [
       UserRole.HR_MANAGER,
