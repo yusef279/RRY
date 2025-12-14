@@ -88,7 +88,7 @@ export default function CyclesPage() {
   };
 
   return (
-    <AppShell title="Appraisal cycles" allowedRoles={['HR Admin', 'System Admin']}>
+    <AppShell title="Appraisal cycles" allowedRoles={['HR Admin', 'HR Manager','HR Employee','System Admin']}>
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Cycles</CardTitle>

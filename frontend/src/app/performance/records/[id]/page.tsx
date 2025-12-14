@@ -38,6 +38,7 @@ export default function RecordPage() {
   const [r, setR] = useState<Record | null>(null);
   const [disputeReason, setDisputeReason] = useState('');
   const [showDispute, setShowDispute] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const me = getCurrentUser();
 
   useEffect(() => {
@@ -50,7 +51,11 @@ export default function RecordPage() {
   if (!r) return <p className="text-muted-foreground">Loading record…</p>;
 
   const canAck = r.status === AppraisalRecordStatus.HR_PUBLISHED && !r.employeeAcknowledgedAt;
-  const canDispute = r.status === AppraisalRecordStatus.HR_PUBLISHED && !r.employeeAcknowledgedAt;
+  const daysSincePublish = Math.floor(
+    (Date.now() - new Date(r.hrPublishedAt ?? Date.now()).getTime()) / (1000 * 60 * 60 * 24)
+  );
+  const canDispute = r.status === AppraisalRecordStatus.HR_PUBLISHED && daysSincePublish <= 7;
+  const daysRemaining = Math.max(0, 7 - daysSincePublish);
 
   const acknowledge = async () => {
     await api.patch(`/performance/records/${r._id}/acknowledge`, {
@@ -63,16 +68,23 @@ export default function RecordPage() {
 
   const raiseDispute = async () => {
     if (!disputeReason.trim()) { toast.error('Reason required'); return; }
-    await api.post('/performance/disputes', {
-      appraisalId: r._id,
-      assignmentId: r.assignmentId,
-      cycleId: r.cycleId,
-      raisedByEmployeeId: me?.employeeId,
-      reason: disputeReason,
-    });
-    toast.success('Dispute raised');
-    setShowDispute(false);
-    router.push('/performance');
+    setSubmitting(true);
+    try {
+      await api.post('/performance/disputes', {
+        appraisalId: r._id,
+        assignmentId: r.assignmentId,
+        cycleId: r.cycleId,
+        raisedByEmployeeId: me?.employeeId,
+        reason: disputeReason,
+      });
+      toast.success('Dispute raised');
+      setShowDispute(false);
+      router.push('/performance');
+    } catch (e) {
+      toast.error('Failed to raise dispute');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -92,6 +104,9 @@ export default function RecordPage() {
             </p>
             <p><span className="font-medium">Submitted:</span> {r.managerSubmittedAt ? new Date(r.managerSubmittedAt).toLocaleDateString() : '—'}</p>
             <p><span className="font-medium">Published:</span> {r.hrPublishedAt ? new Date(r.hrPublishedAt).toLocaleDateString() : '—'}</p>
+            {r.employeeAcknowledgedAt && (
+              <p><span className="font-medium">Acknowledged:</span> {new Date(r.employeeAcknowledgedAt).toLocaleDateString()}</p>
+            )}
           </CardContent>
         </Card>
 
@@ -99,28 +114,56 @@ export default function RecordPage() {
           <CardHeader>
             <CardTitle>Actions</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-4">
             {canAck && (
-              <Button onClick={acknowledge}>Acknowledge</Button>
-            )}
-            {canDispute && (
-              <Button variant="outline" onClick={() => setShowDispute(true)}>
-                Raise dispute
+              <Button onClick={acknowledge} className="w-full">
+                Acknowledge
               </Button>
             )}
 
+            {canDispute && (
+              <>
+                {!showDispute && (
+                  <Button variant="outline" onClick={() => setShowDispute(true)} className="w-full">
+                    Raise dispute
+                  </Button>
+                )}
+                <p className="text-xs text-muted-foreground text-center">
+                  {daysRemaining > 0 
+                    ? `You have ${daysRemaining} day(s) left to dispute this appraisal.`
+                    : 'Dispute window closed'}
+                </p>
+              </>
+            )}
+
             {showDispute && (
-              <div className="space-y-2">
-                <label>Explain your concern</label>
-                <Textarea
-                  rows={3}
-                  value={disputeReason}
-                  onChange={(e) => setDisputeReason(e.target.value)}
-                  placeholder="Be specific about the issue"
-                />
+              <div className="space-y-3 border-t pt-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Explain your concern</label>
+                  <Textarea
+                    rows={3}
+                    value={disputeReason}
+                    onChange={(e) => setDisputeReason(e.target.value)}
+                    placeholder="Be specific about the issue"
+                  />
+                </div>
                 <div className="flex gap-2">
-                  <Button size="sm" onClick={raiseDispute}>Submit dispute</Button>
-                  <Button size="sm" variant="ghost" onClick={() => setShowDispute(false)}>Cancel</Button>
+                  <Button 
+                    size="sm" 
+                    onClick={raiseDispute} 
+                    disabled={submitting}
+                    className="flex-1"
+                  >
+                    {submitting ? 'Submitting…' : 'Submit dispute'}
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="ghost" 
+                    onClick={() => setShowDispute(false)}
+                    className="flex-1"
+                  >
+                    Cancel
+                  </Button>
                 </div>
               </div>
             )}
