@@ -33,7 +33,7 @@ export default function DashboardPage() {
   if (!stats) return <p className="text-muted-foreground">Loading dashboard…</p>;
 
   return (
-    <AppShell title="Performance Dashboard" allowedRoles={['HR Admin', 'HR Manager','HR Employee','System Admin']}>
+    <AppShell title="Performance Dashboard" allowedRoles={['HR Manager','HR Employee','System Admin']}>
       {/* KPI CARDS */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>

@@ -20,17 +20,20 @@ type Cycle = {
   endDate: string;
   status: AppraisalCycleStatus;
   cycleType: AppraisalTemplateType;
+  templateAssignments?: any[]; // ← NEW
 };
 
 export default function CyclesPage() {
   const [rows, setRows] = useState<Cycle[]>([]);
   const [open, setOpen] = useState(false);
+
   const [form, setForm] = useState({
     name: '',
     startDate: '',
     endDate: '',
-    cycleType: AppraisalTemplateType.ANNUAL, // ← NEW
+    cycleType: AppraisalTemplateType.ANNUAL,
   });
+  const [error, setError] = useState('');
 
   const load = () =>
     api
@@ -43,12 +46,17 @@ export default function CyclesPage() {
   }, []);
 
   const create = async () => {
+    setError('');
+    if (!form.name.trim() || !form.startDate || !form.endDate) {
+      setError('Please fill in all required fields.');
+      return;
+    }
     try {
       await api.post('/performance/cycles', {
-        name: form.name,
+        name: form.name.trim(),
         startDate: form.startDate,
         endDate: form.endDate,
-        cycleType: form.cycleType, // ← NEW
+        cycleType: form.cycleType,
         templateAssignments: [],
       });
       toast.success('Created');
@@ -60,9 +68,13 @@ export default function CyclesPage() {
   };
 
   const activate = async (id: string) => {
-    await api.patch(`/performance/cycles/${id}/activate`);
-    toast.success('Activated');
-    load();
+    try {
+      await api.patch(`/performance/cycles/${id}/activate`);
+      toast.success('Activated');
+      load();
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || 'Activation failed');
+    }
   };
 
   const close = async (id: string) => {
@@ -88,13 +100,17 @@ export default function CyclesPage() {
   };
 
   return (
-    <AppShell title="Appraisal cycles" allowedRoles={['HR Admin', 'HR Manager','HR Employee','System Admin']}>
+    <AppShell
+      title="Appraisal cycles"
+      allowedRoles={['HR Admin', 'HR Manager', 'HR Employee', 'System Admin']}
+    >
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Cycles</CardTitle>
           <Button
             onClick={() => {
               setForm({ name: '', startDate: '', endDate: '', cycleType: AppraisalTemplateType.ANNUAL });
+              setError('');
               setOpen(true);
             }}
           >
@@ -131,10 +147,17 @@ export default function CyclesPage() {
                       <TableCell>{new Date(c.endDate).toLocaleDateString()}</TableCell>
                       <TableCell>
                         <span className={`px-2 py-1 rounded text-xs ${statusBadge(c.status)}`}>{c.status}</span>
+                        {c.status === AppraisalCycleStatus.PLANNED && !(c.templateAssignments?.length) && (
+                          <span className="ml-2 text-xs text-amber-700">Add template assignments to activate</span> // ← NEW
+                        )}
                       </TableCell>
                       <TableCell className="text-right flex gap-2 justify-end">
                         {c.status === AppraisalCycleStatus.PLANNED && (
-                          <Button size="sm" onClick={() => activate(c._id)}>
+                          <Button
+                            size="sm"
+                            onClick={() => activate(c._id)}
+                            disabled={!(c.templateAssignments?.length)} // ← NEW
+                          >
                             <Play className="w-4 h-4 mr-1" />
                             Activate
                           </Button>
@@ -172,19 +195,11 @@ export default function CyclesPage() {
             <div className="grid grid-cols-2 gap-4">
               <Label>
                 Start date
-                <Input
-                  type="date"
-                  value={form.startDate}
-                  onChange={(e) => setForm({ ...form, startDate: e.target.value })}
-                />
+                <Input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
               </Label>
               <Label>
                 End date
-                <Input
-                  type="date"
-                  value={form.endDate}
-                  onChange={(e) => setForm({ ...form, endDate: e.target.value })}
-                />
+                <Input type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
               </Label>
             </div>
             <Label>Cycle type</Label>
@@ -199,6 +214,7 @@ export default function CyclesPage() {
                 </option>
               ))}
             </select>
+            {error && <p className="text-sm text-destructive">{error}</p>}
           </div>
           <DialogFooter>
             <Button onClick={create}>Create</Button>
