@@ -11,6 +11,8 @@ export interface Position {
   code: string
   departmentId: string
   departmentName?: string
+  description?: string; // ← new
+
   payGrade?: string
   status?: 'ACTIVE' | 'INACTIVE'
 }

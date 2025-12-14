@@ -16,10 +16,8 @@ import {
   AppraisalTemplateType,
   AppraisalRatingScaleType,
 } from '@/types/performance';
-
+import type { Department, Position } from '@/types/org-structure'; // ← shared file that has description
 /* ----------  TYPES + CONSTANTS  ---------- */
-type Department = { _id: string; name: string };
-type Position = { _id: string; name: string };
 type Criterion = {
   key: string;
   title: string;
@@ -168,7 +166,7 @@ export default function TemplatesPage() {
 
   /* ----------  RENDER  ---------- */
   return (
-    <AppShell title="Appraisal templates" allowedRoles={['HR Admin', 'System Admin']}>
+    <AppShell title="Appraisal templates" allowedRoles={['HR Admin','HR Manager', 'System Admin']}>
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Templates</CardTitle>
@@ -325,26 +323,11 @@ export default function TemplatesPage() {
                   <label key={d._id} className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
-                      checked={form.deptIds.includes(d._id)}
-                      onChange={() => toggleDept(d._id)}
+                      checked={form.deptIds.includes(d._id??"")}
+                      onChange={() => toggleDept(d._id??"")}
                       className="h-4 w-4 rounded"
                     />
                     {d.name}
-                  </label>
-                ))}
-              </div>
-
-              <Label>Applicable positions</Label>
-              <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto border rounded-md p-2">
-                {pos.map((p) => (
-                  <label key={p._id} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={form.posIds.includes(p._id)}
-                      onChange={() => togglePos(p._id)}
-                      className="h-4 w-4 rounded"
-                    />
-                    {p.name}
                   </label>
                 ))}
               </div>

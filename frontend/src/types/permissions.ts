@@ -45,8 +45,10 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
 
   [SystemRole.HR_MANAGER]: [
     Permission.MANAGE_ALL_PROFILES,
+    Permission.EDIT_OWN_PROFILE,
     Permission.VIEW_ORG_STRUCTURE,
     Permission.MANAGE_APPRAISALS,
+    Permission.VIEW_OWN_APPRAISAL, // ← add this
     Permission.VIEW_APPRAISAL_DASHBOARD,
     Permission.EXPORT_APPRAISAL_REPORTS,
     Permission.RESOLVE_DISPUTE,
@@ -75,6 +77,7 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     Permission.MANAGE_ALL_PROFILES,
     Permission.VIEW_ORG_STRUCTURE,
     Permission.VIEW_APPLICATIONS,
+    Permission.VIEW_OWN_APPRAISAL, // ← add this
     Permission.MANAGE_APPRAISALS,              
     Permission.VIEW_APPRAISAL_DASHBOARD,       
   ],
@@ -108,6 +111,8 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
 
   [SystemRole.DEPARTMENT_HEAD]: [
     Permission.VIEW_TEAM_PROFILES,
+    Permission.EDIT_OWN_PROFILE,  
+    Permission.VIEW_OWN_APPRAISAL,
     Permission.CONDUCT_APPRAISALS,
     Permission.VIEW_TEAM_ATTENDANCE,
     Permission.APPROVE_LEAVES,

@@ -5,15 +5,14 @@ import { AppShell } from '@/components/layout/app-shell';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { api } from '@/lib/api';
 import { AppraisalAssignmentStatus } from '@/types/performance';
 
 type Cycle   = { _id: string; name: string };
 type Template = { _id: string; name: string };
-type Department = { _id: string; name: string };
-type Position  = { _id: string; name: string };
+type Department = { _id: string; name: string; description?: string };
+type Position  = { _id: string; name: string; description?: string };
 type Employee  = {
   _id: string;
   firstName: string;
@@ -75,10 +74,30 @@ export default function AssignAppraisalsPage() {
       toast.error('Please select cycle, template and at least one employee');
       return;
     }
+
+    /* 1. filter employees with required fields (manager & department) */
+    const validEmployees = preview.filter((emp) => {
+      const hasManager = emp.managerProfileId?._id;
+      const hasDepartment = emp.primaryDepartmentId?._id;
+      return hasManager && hasDepartment;
+    });
+
+    const invalidCount = preview.length - validEmployees.length;
+    if (invalidCount > 0) {
+      toast.error(
+        `${invalidCount} employee(s) missing manager or department assignment. Only ${validEmployees.length} can be assigned.`
+      );
+    }
+
+    if (validEmployees.length === 0) {
+      toast.error('No employees with valid manager and department assignments');
+      return;
+    }
+
     setAssigning(true);
 
-    /* 1. build raw objects */
-    const raw = preview.map((emp) => ({
+    /* 2. build raw objects */
+    const raw = validEmployees.map((emp) => ({
       cycleId,
       templateId,
       employeeProfileId: emp._id,
@@ -88,19 +107,16 @@ export default function AssignAppraisalsPage() {
       status: AppraisalAssignmentStatus.NOT_STARTED,
     }));
 
-    /* 2. strip undefined / empty strings */
-    const cleaned = raw.map((r) => {
-      const out: any = {
-        cycleId: r.cycleId,
-        templateId: r.templateId,
-        employeeProfileId: r.employeeProfileId,
-        status: r.status,
-      };
-      if (r.managerProfileId && r.managerProfileId !== '') out.managerProfileId = r.managerProfileId;
-      if (r.departmentId && r.departmentId !== '') out.departmentId = r.departmentId;
-      if (r.positionId && r.positionId !== '') out.positionId = r.positionId;
-      return out;
-    });
+    /* 3. all fields are guaranteed to exist after filtering */
+    const cleaned = raw.map((r) => ({
+      cycleId: r.cycleId,
+      templateId: r.templateId,
+      employeeProfileId: r.employeeProfileId,
+      managerProfileId: r.managerProfileId,
+      departmentId: r.departmentId,
+      ...(r.positionId && { positionId: r.positionId }),
+      status: r.status,
+    }));
 
     try {
       await api.post('/performance/assignments/bulk', { assignments: cleaned });
@@ -118,7 +134,7 @@ export default function AssignAppraisalsPage() {
 
   /* ----------  RENDER  ---------- */
   return (
-    <AppShell title="Assign appraisals" allowedRoles={['HR Admin', 'System Admin']}>
+    <AppShell title="Assign appraisals" allowedRoles={['HR Admin','HR Manager','System Admin']}>
       <Card>
         <CardHeader>
           <CardTitle>Bulk assignment</CardTitle>
@@ -163,9 +179,9 @@ export default function AssignAppraisalsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label>Departments (leave empty = all)</Label>
-              <ScrollArea className="h-40 border rounded-md p-2">
+              <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto border rounded-md p-2">
                 {depts.map((d) => (
-                  <label key={d._id} className="flex items-center gap-2 text-sm">
+                  <label key={d._id} className="flex items-start gap-2 text-sm cursor-pointer">
                     <input
                       type="checkbox"
                       checked={deptIds.includes(d._id)}
@@ -176,19 +192,26 @@ export default function AssignAppraisalsPage() {
                             : [...prev, d._id]
                         )
                       }
-                      className="h-4 w-4 rounded"
+                      className="h-4 w-4 rounded mt-0.5"
                     />
-                    {d.name}
+                    <span className="flex-1">
+                      {d.name}
+                      {d.description && (
+                        <span className="text-muted-foreground text-xs ml-1">
+                          ({d.description})
+                        </span>
+                      )}
+                    </span>
                   </label>
                 ))}
-              </ScrollArea>
+              </div>
             </div>
 
             <div>
               <Label>Positions (leave empty = all)</Label>
-              <ScrollArea className="h-40 border rounded-md p-2">
+              <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto border rounded-md p-2">
                 {pos.map((p) => (
-                  <label key={p._id} className="flex items-center gap-2 text-sm">
+                  <label key={p._id} className="flex items-start gap-2 text-sm cursor-pointer">
                     <input
                       type="checkbox"
                       checked={posIds.includes(p._id)}
@@ -199,24 +222,38 @@ export default function AssignAppraisalsPage() {
                             : [...prev, p._id]
                         )
                       }
-                      className="h-4 w-4 rounded"
+                      className="h-4 w-4 rounded mt-0.5"
                     />
-                    {p.name}
+                    <span className="flex-1">
+                      {p.name}
+                      {p.description && (
+                        <span className="text-muted-foreground text-xs ml-1">
+                          ({p.description})
+                        </span>
+                      )}
+                    </span>
                   </label>
                 ))}
-              </ScrollArea>
+              </div>
             </div>
           </div>
 
           {/* Preview */}
           <div>
-            <Label>Preview ({preview.length} employees)</Label>
-            <ScrollArea className="h-64 border rounded-md p-2">
+            <Label>
+              Preview ({preview.length} employees)
+              {preview.some((e) => !e.managerProfileId?._id || !e.primaryDepartmentId?._id) && (
+                <span className="text-destructive text-xs ml-2">
+                  ({preview.filter((e) => e.managerProfileId?._id && e.primaryDepartmentId?._id).length} valid)
+                </span>
+              )}
+            </Label>
+            <div className="h-64 overflow-y-auto border rounded-md p-2">
               {preview.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No employees match the selected filters.</p>
               ) : (
                 <Table>
-                  <TableHeader>
+                  <TableHeader className="sticky top-0 bg-background">
                     <TableRow>
                       <TableHead>Employee</TableHead>
                       <TableHead>ID</TableHead>
@@ -225,20 +262,33 @@ export default function AssignAppraisalsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {preview.map((emp) => (
-                      <TableRow key={emp._id}>
-                        <TableCell>
-                          {emp.firstName} {emp.lastName}
-                        </TableCell>
-                        <TableCell>{emp.employeeNumber}</TableCell>
-                        <TableCell>{emp.primaryDepartmentId?.name ?? '—'}</TableCell>
-                        <TableCell>{emp.primaryPositionId?.name ?? '—'}</TableCell>
-                      </TableRow>
-                    ))}
+                    {preview.map((emp) => {
+                      const hasManager = emp.managerProfileId?._id;
+                      const hasDept = emp.primaryDepartmentId?._id;
+                      const isInvalid = !hasManager || !hasDept;
+                      return (
+                        <TableRow
+                          key={emp._id}
+                          className={isInvalid ? 'bg-destructive/5 opacity-60' : ''}
+                        >
+                          <TableCell>
+                            {emp.firstName} {emp.lastName}
+                            {isInvalid && (
+                              <div className="text-xs text-destructive mt-1">
+                                {!hasManager && 'Missing manager'} {!hasManager && !hasDept && '• '} {!hasDept && 'Missing department'}
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell>{emp.employeeNumber}</TableCell>
+                          <TableCell>{emp.primaryDepartmentId?.name ?? '—'}</TableCell>
+                          <TableCell>{emp.primaryPositionId?.name ?? '—'}</TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}
-            </ScrollArea>
+            </div>
           </div>
 
           {/* Assign button */}

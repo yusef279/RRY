@@ -67,7 +67,7 @@ export default function DisputesPage() {
   };
 
   return (
-    <AppShell title="Appraisal disputes" allowedRoles={['HR Admin', 'System Admin']}>
+    <AppShell title="Appraisal disputes" allowedRoles={['HR Admin','HR Manager', 'System Admin']}>
       <Card>
         <CardHeader>
           <CardTitle>Disputes</CardTitle>
