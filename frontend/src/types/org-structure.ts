@@ -8,6 +8,7 @@ export interface Department {
 export interface Position {
   _id?: string
   name: string
+  title: string
   code: string
   departmentId: string
   departmentName?: string

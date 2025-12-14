@@ -316,22 +316,45 @@ export default function TemplatesPage() {
                 onChange={(e) => setForm({ ...form, instructions: e.target.value })}
                 placeholder="Guidelines for managers / employees"
               />
+{/* ----- Applicable departments ----- */}
+<Label>Applicable departments</Label>
+{depts.length === 0 ? (
+  <p className="text-sm text-muted-foreground">No departments available.</p>
+) : (
+  <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto border rounded-md p-2">
+    {depts.map((d) => (
+      <label key={d._id} className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={form.deptIds.includes(d._id ?? '')}
+          onChange={() => toggleDept(d._id ?? '')}
+          className="h-4 w-4 rounded"
+        />
+        {d.name}
+      </label>
+    ))}
+  </div>
+)}
 
-              <Label>Applicable departments</Label>
-              <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto border rounded-md p-2">
-                {depts.map((d) => (
-                  <label key={d._id} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={form.deptIds.includes(d._id??"")}
-                      onChange={() => toggleDept(d._id??"")}
-                      className="h-4 w-4 rounded"
-                    />
-                    {d.name}
-                  </label>
-                ))}
-              </div>
-
+{/* ----- Applicable positions ----- */}
+<Label>Applicable positions</Label>
+{pos.length === 0 ? (
+  <p className="text-sm text-muted-foreground">No positions available.</p>
+) : (
+  <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto border rounded-md p-2">
+    {pos.map((p) => (
+      <label key={p._id} className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={form.posIds.includes(p._id ?? '')}
+          onChange={() => togglePos(p._id ?? '')}
+          className="h-4 w-4 rounded"
+        />
+        {p.title}
+      </label>
+    ))}
+  </div>
+)}
               <div className="flex items-center justify-between">
                 <Label>Evaluation criteria</Label>
                 <Button size="sm" onClick={addCriterion}>
