@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -12,7 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -71,6 +71,22 @@ export default function ProfilePage() {
   const initials =
     (profile?.firstName?.[0] || "N") + (profile?.lastName?.[0] || "");
 
+  const apiBase =
+    process.env.NEXT_PUBLIC_API_URL ??
+    process.env.NEXT_PUBLIC_BACKEND_URL ??
+    "http://localhost:5000";
+
+  const photoSrc = useMemo(() => {
+    const url =
+      profile?.profilePictureUrl ||
+      (profile as any)?.profilePicture ||
+      (profile as any)?.profilePictureURL;
+
+    if (!url) return "";
+    if (typeof url === "string" && url.startsWith("http")) return url;
+    return `${apiBase}${url}`;
+  }, [apiBase, profile?.profilePictureUrl, profile]);
+
   const formattedHireDate = profile?.dateOfHire
     ? new Date(profile.dateOfHire).toLocaleDateString()
     : "Not set";
@@ -111,6 +127,7 @@ export default function ProfilePage() {
           <Card>
             <CardHeader className="flex flex-row items-center gap-4">
               <Avatar className="h-14 w-14">
+                <AvatarImage src={photoSrc} alt="Profile picture" />
                 <AvatarFallback className="text-base font-semibold">
                   {initials.toUpperCase()}
                 </AvatarFallback>

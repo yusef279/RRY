@@ -52,15 +52,21 @@ export function getCurrentUser(): AuthPayload | null {
   if (typeof window === 'undefined') return null;
 
   const raw = localStorage.getItem('user');
-  if (!raw) return null;
+  const tokenPayload = decodeToken();
+  if (!raw) return tokenPayload;
 
   try {
     const parsed = JSON.parse(raw) as AuthPayload;
     // Basic validation
-    if (!parsed.userId || !parsed.email) return null;
-    return parsed;
+    if (!parsed.userId || !parsed.email) return tokenPayload;
+    return {
+      ...parsed,
+      role: parsed.role ?? tokenPayload?.role,
+      roles: parsed.roles ?? tokenPayload?.roles,
+      permissions: parsed.permissions ?? tokenPayload?.permissions,
+    };
   } catch {
-    return null;
+    return tokenPayload;
   }
 }
 

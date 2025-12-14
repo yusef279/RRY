@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   Req,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PerformanceService } from './performance.service';
 import {
@@ -27,6 +28,7 @@ import { Permissions } from '../auth/decorators/roles.decorators';
 import { Permission } from '../auth/permissions.constant';
 import { AuthUser } from '../auth/auth-user.interface';
 import { Request } from 'express';
+import { SystemRole } from '../employee-profile/enums/employee-profile.enums';
 
 @Controller('performance')
 //@UseGuards(JwtAuthGuard, RolesGuard)
@@ -193,12 +195,19 @@ acknowledge(
 
   /**  USER-SCOPED  */
   @Get('employees/:employeeId/history')
-  @Permissions(Permission.VIEW_OWN_APPRAISAL, Permission.MANAGE_APPRAISALS)
   getEmployeeHistory(
     @Param('employeeId') employeeId: string,
     @Req() req: Request & { user: AuthUser },
     @Query('limit') limit?: number,
   ) {
+    const user = req.user;
+    if (!user) throw new ForbiddenException('Insufficient permissions');
+
+    const isSelf = user.employeeId && String(user.employeeId) === String(employeeId);
+    if (!isSelf && !this.canViewOthersPerformance(user)) {
+      throw new ForbiddenException('Insufficient permissions');
+    }
+
     return this.service.getEmployeeAppraisalHistory(employeeId, limit, req.user);
   }
 
@@ -243,5 +252,27 @@ acknowledge(
   @Permissions(Permission.MANAGE_APPRAISALS)
   getDepartmentProgress(@Query('cycleId') cycleId?: string) {
     return this.service.getDepartmentProgress(cycleId);
+  }
+
+  /* helpers */
+  private canViewOthersPerformance(user: AuthUser): boolean {
+    if (this.isHrOrAdmin(user)) return true;
+    const perms = (user as any).permissions ?? [];
+    return (
+      perms.includes(Permission.MANAGE_APPRAISALS) ||
+      perms.includes(Permission.CONDUCT_APPRAISALS)
+    );
+  }
+
+  private isHrOrAdmin(user: AuthUser): boolean {
+    const roles = [user.role, ...((user as any).roles ?? [])].filter(Boolean) as SystemRole[];
+    return roles.some((role) =>
+      [
+        SystemRole.HR_MANAGER,
+        SystemRole.HR_ADMIN,
+        SystemRole.HR_EMPLOYEE,
+        SystemRole.SYSTEM_ADMIN,
+      ].includes(role),
+    );
   }
 }
