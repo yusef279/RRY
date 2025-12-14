@@ -29,9 +29,10 @@ import { Permission } from '../auth/permissions.constant';
 import { AuthUser } from '../auth/auth-user.interface';
 import { Request } from 'express';
 import { SystemRole } from '../employee-profile/enums/employee-profile.enums';
+import { JwtAuthGuard, PermissionsGuard } from '../auth';
 
 @Controller('performance')
-//@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class PerformanceController {
   constructor(private readonly service: PerformanceService) {}
 

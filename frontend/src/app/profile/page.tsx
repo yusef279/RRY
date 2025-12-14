@@ -25,6 +25,8 @@ export default function ProfilePage() {
 
   const [profile, setProfile] = useState<EmployeeProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [history, setHistory] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -38,6 +40,27 @@ export default function ProfilePage() {
         const res = await api.get(`/employee-profile/${user.employeeId}`);
         const data: EmployeeProfile = res.data;
         setProfile(data);
+
+        // Appraisal history (self). Ignore 403.
+        setHistoryLoading(true);
+        try {
+          const histRes = await api.get(
+            `/performance/employees/${user.employeeId}/history`,
+            { params: { limit: 5 } },
+          );
+          setHistory(histRes.data || []);
+        } catch (err: any) {
+          const status = err?.response?.status;
+          if (status !== 403) {
+            console.warn(
+              'Failed to load appraisal history',
+              err?.response?.data?.message || err?.message,
+            );
+          }
+          setHistory([]);
+        } finally {
+          setHistoryLoading(false);
+        }
       } catch (error: any) {
         const status = error?.response?.status;
         const msg = error?.response?.data?.message;
