@@ -26,6 +26,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import { Download, Eye } from "lucide-react";
 import { exportEmployees } from "@/lib/export";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 type EmployeeStatus =
   | "ACTIVE"
@@ -46,6 +47,7 @@ type EmployeeListItem = {
   departmentName?: string;
   positionTitle?: string;
   workEmail?: string;
+  profilePictureUrl?: string;
 };
 
 const STATUS_OPTIONS: (EmployeeStatus | "ALL")[] = [
@@ -71,8 +73,6 @@ export default function AdminEmployeesPage() {
   useEffect(() => {
     const loadEmployees = async () => {
       try {
-        // GET /employee-profile/admin/search?q=
-        // Empty query returns all employees
         const res = await api.get("/employee-profile/admin/search", {
           params: { q: "" },
         });
@@ -180,7 +180,7 @@ export default function AdminEmployeesPage() {
               No employees found with the current filters.
             </p>
           ) : (
-            <ScrollArea className="max-h-[520px]">
+            <ScrollArea className="h-[600px]">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -198,10 +198,27 @@ export default function AdminEmployeesPage() {
                   {filteredEmployees.map((emp) => (
                     <TableRow key={emp._id}>
                       <TableCell>
-                        <div className="flex flex-col">
-                          <span className="font-medium">
-                            {emp.firstName} {emp.lastName}
-                          </span>
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-9 w-9">
+                            <AvatarImage
+                              src={
+                                emp.profilePictureUrl
+                                  ? emp.profilePictureUrl.startsWith("http")
+                                    ? emp.profilePictureUrl
+                                    : `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}${emp.profilePictureUrl}`
+                                  : ""
+                              }
+                            />
+                            <AvatarFallback>
+                              {(emp.firstName?.[0] || "").toUpperCase()}
+                              {(emp.lastName?.[0] || "").toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex flex-col">
+                            <span className="font-medium">
+                              {emp.firstName} {emp.lastName}
+                            </span>
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell>{emp.employeeNumber}</TableCell>

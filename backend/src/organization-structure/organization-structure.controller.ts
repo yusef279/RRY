@@ -34,7 +34,7 @@ import type { AuthUser } from '../auth';
 @Controller('organization-structure')
 @UseGuards(JwtAuthGuard)
 export class OrganizationStructureController {
-  constructor(private readonly service: OrganizationStructureService) {}
+  constructor(private readonly service: OrganizationStructureService) { }
 
   // -------------------------------------------------------------
   // DEPARTMENTS
@@ -148,6 +148,17 @@ export class OrganizationStructureController {
   }
 
   // -------------------------------------------------------------
+  // AUDIT LOGS
+  // -------------------------------------------------------------
+
+  @Get('logs')
+  @UseGuards(PermissionsGuard)
+  @Permissions(Permission.MANAGE_ORG_STRUCTURE)
+  getChangeLogs() {
+    return this.service.getChangeLogs();
+  }
+
+  // -------------------------------------------------------------
   // CHANGE REQUESTS
   // -------------------------------------------------------------
 
@@ -155,8 +166,22 @@ export class OrganizationStructureController {
   @UseGuards(PermissionsGuard)
   @Permissions(Permission.VIEW_ORG_STRUCTURE)
   createChangeRequest(@Body() dto: CreateStructureChangeRequestDto, @CurrentUser() user: AuthUser) {
-    dto.requestedByEmployeeId = user.employeeId!;
+    console.log('CREATE REQUEST DTO:', JSON.stringify(dto, null, 2));
+    console.log('USER:', JSON.stringify(user, null, 2));
+
+    if (!user.employeeId) {
+      throw new BadRequestException('User profile not linked to an employee ID.');
+    }
+
+    dto.requestedByEmployeeId = user.employeeId;
     return this.service.createChangeRequest(dto);
+  }
+
+  @Get('change-requests/my')
+  @UseGuards(PermissionsGuard)
+  @Permissions(Permission.VIEW_ORG_STRUCTURE)
+  getMyChangeRequests(@CurrentUser() user: AuthUser) {
+    return this.service.getMyChangeRequests(user.employeeId!);
   }
 
   @Get('change-requests/pending')

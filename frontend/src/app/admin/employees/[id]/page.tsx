@@ -195,17 +195,75 @@ export default function EmployeeDetailPage() {
         <p className="text-muted-foreground">Loading employee...</p>
       ) : (
         <div className="space-y-6">
-          <div className="flex items-center gap-3">
-            <Button variant="outline" size="icon" onClick={() => router.back()}>
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <div className="flex-1">
-              <h2 className="text-2xl font-bold">
-                {form.firstName} {form.lastName}
-              </h2>
-              <p className="text-sm text-muted-foreground">ID: {form._id}</p>
+          <div className="flex items-center gap-6">
+            <div className="relative">
+              <Avatar className="h-24 w-24 border-2 border-border">
+                <AvatarImage
+                  src={
+                    form.profilePictureUrl
+                      ? form.profilePictureUrl.startsWith('http')
+                        ? form.profilePictureUrl
+                        : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}${form.profilePictureUrl}`
+                      : ''
+                  }
+                  className="object-cover"
+                />
+                <AvatarFallback className="text-2xl font-bold">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              <label className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm cursor-pointer hover:bg-primary/90 transition-colors">
+                <Upload className="h-4 w-4" />
+                <input
+                  type="file"
+                  className="hidden"
+                  accept="image/*"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0]
+                    if (!file || !form._id) return
+
+                    const formData = new FormData()
+                    formData.append('profilePicture', file)
+
+                    const toastId = toast.loading('Uploading photo...')
+                    try {
+                      const res = await api.post(
+                        `/employee-profile/admin/${form._id}/profile-picture`,
+                        formData,
+                        {
+                          headers: { 'Content-Type': 'multipart/form-data' },
+                        }
+                      )
+                      setForm((prev) =>
+                        prev
+                          ? { ...prev, profilePictureUrl: res.data.profilePictureUrl }
+                          : prev
+                      )
+                      toast.success('Photo uploaded', { id: toastId })
+                    } catch (error: any) {
+                      console.error(error)
+                      toast.error('Upload failed', { id: toastId })
+                    }
+                  }}
+                />
+              </label>
             </div>
-            {form.status && <Badge variant="secondary">{form.status}</Badge>}
+
+            <div className="flex-1">
+              <div className="flex items-center gap-3 mb-1">
+                <h2 className="text-3xl font-bold">
+                  {form.firstName} {form.lastName}
+                </h2>
+                {form.status && <Badge variant="secondary">{form.status}</Badge>}
+              </div>
+              <p className="text-sm text-muted-foreground mb-2">ID: {form.employeeNumber || form._id}</p>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => router.back()}>
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back
+                </Button>
+              </div>
+            </div>
           </div>
 
           <Tabs defaultValue="personal" className="w-full">

@@ -35,7 +35,7 @@ export class AuthService {
     @InjectModel(Department.name)
     private deptModel: Model<DepartmentDocument>,
     private jwt: JwtService,
-  ) {}
+  ) { }
 
   /* ----------  REGISTER  ---------- */
   async register(dto: RegisterDto): Promise<any> {
@@ -45,7 +45,7 @@ export class AuthService {
     const lastName: string = dto.lastName;
 
     // Optional fields - will be set by admin later
-    const role: SystemRole = dto.role || SystemRole.DEPARTMENT_EMPLOYEE; // Default role
+    const role: SystemRole = dto.role || SystemRole.JOB_CANDIDATE; // Default role for self-registration is JOB_CANDIDATE
     const nationalId: string = dto.nationalId || `TEMP-${Date.now()}`; // Temporary ID
     const employeeNumber: string = dto.employeeNumber || `EMP-${Date.now()}`; // Auto-generate
     const dateOfHire: string =

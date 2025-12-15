@@ -46,6 +46,8 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     Permission.MANAGE_RECRUITMENT,
     Permission.MANAGE_LEAVES,
     Permission.APPROVE_PAYROLL,
+    Permission.EDIT_OWN_PROFILE,
+    Permission.VIEW_TEAM_PROFILES,
   ],
 
   [SystemRole.HR_ADMIN]: [
@@ -53,6 +55,7 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     Permission.VIEW_ORG_STRUCTURE,
     Permission.MANAGE_ATTENDANCE,
     Permission.MANAGE_LEAVES,
+    Permission.EDIT_OWN_PROFILE,
   ],
 
   [SystemRole.HR_EMPLOYEE]: [

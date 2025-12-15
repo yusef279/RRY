@@ -39,6 +39,8 @@ type AdminChangeRequest = {
   _id: string;
   requestId: string;
   employeeProfileId: string;
+  employeeName?: string;
+  employeeNumber?: string;
 
   requestDescription: string;
   reason?: string;
@@ -108,7 +110,7 @@ export default function AdminChangeRequestsPage() {
         console.error(error);
         toast.error(
           error?.response?.data?.message ||
-            "Failed to load profile change requests.",
+          "Failed to load profile change requests.",
         );
       } finally {
         setLoading(false);
@@ -129,6 +131,8 @@ export default function AdminChangeRequestsPage() {
         [
           req.requestId,
           req.employeeProfileId,
+          req.employeeName,
+          req.employeeNumber,
           parsed.fieldName,
           parsed.currentValue,
           parsed.requestedValue,
@@ -271,10 +275,10 @@ export default function AdminChangeRequestsPage() {
                         <TableCell>
                           <div className="flex flex-col">
                             <span className="font-medium">
-                              Unknown employee
+                              {req.employeeName || "Unknown employee"}
                             </span>
                             <span className="text-xs text-muted-foreground">
-                              #{req.employeeProfileId}
+                              #{req.employeeNumber || req.employeeProfileId}
                             </span>
                           </div>
                         </TableCell>
@@ -293,8 +297,8 @@ export default function AdminChangeRequestsPage() {
                               req.status === "PENDING"
                                 ? "secondary"
                                 : req.status === "APPROVED"
-                                ? "default"
-                                : "outline"
+                                  ? "default"
+                                  : "outline"
                             }
                             className="uppercase"
                           >
@@ -342,9 +346,9 @@ export default function AdminChangeRequestsPage() {
             </DialogHeader>
             <div className="space-y-4">
               <div className="text-sm">
-                <p className="font-medium">Unknown employee</p>
+                <p className="font-medium">{selected.employeeName || "Unknown employee"}</p>
                 <p className="text-xs text-muted-foreground">
-                  #{selected.employeeProfileId}
+                  #{selected.employeeNumber || selected.employeeProfileId}
                 </p>
               </div>
 

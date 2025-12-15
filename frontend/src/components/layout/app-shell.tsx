@@ -49,8 +49,12 @@ const navSections: NavSection[] = [
   },
   {
     label: "Manager",
-    items: [{ href: "/manager/team", label: "My team" }],
-    requiredRoles: ["department head", "HR Manager", "System Admin"], // tweak if you want
+    items: [
+      { href: "/manager/team", label: "My team" },
+      { href: "/manager/team/org-tree", label: "Org Tree" },
+      { href: "/manager/team/structure-requests", label: "Structure Requests" },
+    ],
+    requiredRoles: ["department head", "HR Manager", "HR Admin", "System Admin"],
   },
   {
     label: "HR Admin",
@@ -180,7 +184,7 @@ export function AppShell({
                           className={cn(
                             "w-full justify-start text-sm",
                             active &&
-                              "bg-slate-900 text-slate-50 hover:bg-slate-900"
+                            "bg-slate-900 text-slate-50 hover:bg-slate-900"
                           )}
                         >
                           {item.label}
