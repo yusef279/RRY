@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -12,7 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,8 @@ export default function ProfilePage() {
 
   const [profile, setProfile] = useState<EmployeeProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [history, setHistory] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -38,6 +40,27 @@ export default function ProfilePage() {
         const res = await api.get(`/employee-profile/${user.employeeId}`);
         const data: EmployeeProfile = res.data;
         setProfile(data);
+
+        // Appraisal history (self). Ignore 403.
+        setHistoryLoading(true);
+        try {
+          const histRes = await api.get(
+            `/performance/employees/${user.employeeId}/history`,
+            { params: { limit: 5 } },
+          );
+          setHistory(histRes.data || []);
+        } catch (err: any) {
+          const status = err?.response?.status;
+          if (status !== 403) {
+            console.warn(
+              'Failed to load appraisal history',
+              err?.response?.data?.message || err?.message,
+            );
+          }
+          setHistory([]);
+        } finally {
+          setHistoryLoading(false);
+        }
       } catch (error: any) {
         const status = error?.response?.status;
         const msg = error?.response?.data?.message;
@@ -70,6 +93,22 @@ export default function ProfilePage() {
 
   const initials =
     (profile?.firstName?.[0] || "N") + (profile?.lastName?.[0] || "");
+
+  const apiBase =
+    process.env.NEXT_PUBLIC_API_URL ??
+    process.env.NEXT_PUBLIC_BACKEND_URL ??
+    "http://localhost:5000";
+
+  const photoSrc = useMemo(() => {
+    const url =
+      profile?.profilePictureUrl ||
+      (profile as any)?.profilePicture ||
+      (profile as any)?.profilePictureURL;
+
+    if (!url) return "";
+    if (typeof url === "string" && url.startsWith("http")) return url;
+    return `${apiBase}${url}`;
+  }, [apiBase, profile?.profilePictureUrl, profile]);
 
   const formattedHireDate = profile?.dateOfHire
     ? new Date(profile.dateOfHire).toLocaleDateString()
@@ -111,6 +150,7 @@ export default function ProfilePage() {
           <Card>
             <CardHeader className="flex flex-row items-center gap-4">
               <Avatar className="h-14 w-14">
+                <AvatarImage src={photoSrc} alt="Profile picture" />
                 <AvatarFallback className="text-base font-semibold">
                   {initials.toUpperCase()}
                 </AvatarFallback>

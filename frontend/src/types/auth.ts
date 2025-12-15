@@ -22,6 +22,8 @@ export interface AuthPayload {
   employeeId?: string
   departmentId?: string
   positionId?: string
+  roles?: UserRole[]
+  permissions?: string[]
 
   exp?: number
 }

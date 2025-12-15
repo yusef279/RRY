@@ -9,8 +9,14 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
 
-import { EmployeeProfile, EmployeeProfileDocument } from '../employee-profile/models/employee-profile.schema';
-import { EmployeeSystemRole, EmployeeSystemRoleDocument } from '../employee-profile/models/employee-system-role.schema';
+import {
+  EmployeeProfile,
+  EmployeeProfileDocument,
+} from '../employee-profile/models/employee-profile.schema';
+import {
+  EmployeeSystemRole,
+  EmployeeSystemRoleDocument,
+} from '../employee-profile/models/employee-system-role.schema';
 import { Department, DepartmentDocument } from '../organization-structure/models/department.schema';
 
 import { AuthUser } from './auth-user.interface';
@@ -22,9 +28,12 @@ export class AuthService {
   private blacklistedTokens = new Set<string>();
 
   constructor(
-    @InjectModel(EmployeeProfile.name) private empModel: Model<EmployeeProfileDocument>,
-    @InjectModel(EmployeeSystemRole.name) private roleModel: Model<EmployeeSystemRoleDocument>,
-    @InjectModel(Department.name) private deptModel: Model<DepartmentDocument>,
+    @InjectModel(EmployeeProfile.name)
+    private empModel: Model<EmployeeProfileDocument>,
+    @InjectModel(EmployeeSystemRole.name)
+    private roleModel: Model<EmployeeSystemRoleDocument>,
+    @InjectModel(Department.name)
+    private deptModel: Model<DepartmentDocument>,
     private jwt: JwtService,
   ) {}
 
@@ -39,7 +48,8 @@ export class AuthService {
     const role: SystemRole = dto.role || SystemRole.DEPARTMENT_EMPLOYEE; // Default role
     const nationalId: string = dto.nationalId || `TEMP-${Date.now()}`; // Temporary ID
     const employeeNumber: string = dto.employeeNumber || `EMP-${Date.now()}`; // Auto-generate
-    const dateOfHire: string = dto.dateOfHire || new Date().toISOString().split('T')[0]; // Today
+    const dateOfHire: string =
+      dto.dateOfHire || new Date().toISOString().split('T')[0]; // Today
     const departmentId: string | undefined = dto.departmentId;
 
     // Validate required fields
@@ -70,18 +80,21 @@ export class AuthService {
       throw new ConflictException('Email already registered');
 
     // Check national ID uniqueness only if provided by user
-    if (dto.nationalId && await this.empModel.findOne({ nationalId: dto.nationalId }))
+    if (dto.nationalId && (await this.empModel.findOne({ nationalId: dto.nationalId })))
       throw new ConflictException('National ID already registered');
 
     // Check employee number uniqueness only if provided by user
-    if (dto.employeeNumber && await this.empModel.findOne({ employeeNumber: dto.employeeNumber }))
+    if (dto.employeeNumber && (await this.empModel.findOne({ employeeNumber: dto.employeeNumber })))
       throw new ConflictException('Employee number already exists');
 
     // Validate department if provided
     let deptOid: string | undefined;
     if (departmentId) {
       const dept = await this.deptModel.findOne({ code: departmentId }).exec();
-      if (!dept) throw new BadRequestException(`Department with code "${departmentId}" not found`);
+      if (!dept)
+        throw new BadRequestException(
+          `Department with code "${departmentId}" not found`,
+        );
       deptOid = dept._id.toString();
     }
 
@@ -114,9 +127,7 @@ export class AuthService {
       return this.buildTokens(user);
     } catch (error) {
       console.error('❌ Registration failed:', error.message);
-      throw new BadRequestException(
-        `Registration failed: ${error.message}`,
-      );
+      throw new BadRequestException(`Registration failed: ${error.message}`);
     }
   }
 
@@ -130,10 +141,9 @@ export class AuthService {
       throw new BadRequestException('Email and password are required');
     }
 
-
     try {
       const emp = await this.empModel.findOne({ workEmail: email });
-      
+
       // ✅ Generic error message for security
       if (!emp) {
         console.warn('❌ Login failed: User not found -', email);
@@ -180,7 +190,6 @@ export class AuthService {
       // ✅ Add token to blacklist (prevents reuse)
       this.blacklistedTokens.add(token);
 
-
       return {
         message: 'Logged out successfully',
         timestamp: new Date().toISOString(),
@@ -205,21 +214,32 @@ export class AuthService {
       // fallback: try accessProfileId first, then search by employeeProfileId
       let roleDoc = await this.roleModel.findById(emp.accessProfileId).lean().exec();
       if (!roleDoc)
-        roleDoc = await this.roleModel.findOne({ employeeProfileId: emp._id }).lean().exec();
+        roleDoc = await this.roleModel
+          .findOne({ employeeProfileId: emp._id })
+          .lean()
+          .exec();
 
       if (!roleDoc || !roleDoc.roles?.length) throw new Error('Role not found for user');
 
       console.log('🔐 Building token for user:', emp.workEmail);
       console.log('📋 Role document found:', JSON.stringify(roleDoc, null, 2));
-      console.log('🎭 User role:', roleDoc.roles[0]);
+      console.log('🎭 User role:(NEW CODE RUNNING)', roleDoc.roles[0]);
+
+      // ✅ IMPORTANT: include roles[] + permissions[] in the JWT payload
+      const roles = (roleDoc.roles ?? []).filter(Boolean);
 
       const payload: AuthUser = {
         userId: emp._id.toString(),
         email: emp.workEmail,
-        role: roleDoc.roles[0],
+        role: roles[0] as any,
+        roles: roles as any,
+        permissions: (roleDoc.permissions ?? []) as any,
         employeeId: emp._id.toString(),
         departmentId: emp.primaryDepartmentId?.toString(),
+        positionId: (emp.primaryPositionId ?? emp.positionId)?.toString?.(),
       };
+
+      console.log('✅ Payload going into JWT:', JSON.stringify(payload, null, 2));
 
       const accessToken = this.jwt.sign(payload);
 

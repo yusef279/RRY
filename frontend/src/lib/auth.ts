@@ -20,12 +20,19 @@ export const clearToken = () => {
   localStorage.removeItem(TOKEN_KEY)
 }
 
+// ✅ JWT base64url safe decode
+const decodeBase64Url = (input: string) => {
+  const base64 = input.replace(/-/g, '+').replace(/_/g, '/')
+  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4)
+  return atob(padded)
+}
+
 export const decodeToken = (): AuthPayload | null => {
   const token = getToken()
   if (!token) return null
   try {
     const [, payload] = token.split('.')
-    const decoded = atob(payload)
+    const decoded = decodeBase64Url(payload)
     return JSON.parse(decoded) as AuthPayload
   } catch (error) {
     console.error('Failed to decode token', error)
@@ -38,7 +45,10 @@ export const getUserRole = (): UserRole | undefined => {
   return payload?.role
 }
 
-export const isRoleAllowed = (role: UserRole | undefined, allowedRoles?: UserRole[]) => {
+export const isRoleAllowed = (
+  role: UserRole | undefined,
+  allowedRoles?: UserRole[],
+) => {
   if (!allowedRoles || allowedRoles.length === 0) return true
   return !!role && allowedRoles.includes(role)
 }
@@ -58,27 +68,38 @@ export function getCurrentUser(): AuthPayload | null {
   if (typeof window === 'undefined') return null
 
   const raw = localStorage.getItem('user')
-  if (!raw) return null
+  const tokenPayload = decodeToken()
+  if (!raw) return tokenPayload
 
   try {
     const parsed = JSON.parse(raw) as AuthPayload
     // Basic validation
-    if (!parsed.userId || !parsed.email) return null
-    // Ensure permissions array exists
-    if (!parsed.permissions) parsed.permissions = []
-    return parsed
+    if (!parsed.userId || !parsed.email) return tokenPayload
+
+    return {
+      ...parsed,
+      role: parsed.role ?? tokenPayload?.role,
+      roles: parsed.roles ?? tokenPayload?.roles,
+      permissions: parsed.permissions ?? tokenPayload?.permissions,
+      employeeId: parsed.employeeId ?? tokenPayload?.employeeId,
+      departmentId: parsed.departmentId ?? tokenPayload?.departmentId,
+      positionId: (parsed as any).positionId ?? (tokenPayload as any)?.positionId,
+    }
   } catch {
-    return null
+    return tokenPayload
   }
 }
 
 /**
  * Checks if the current user has at least one of the required roles.
+ * ✅ Checks both role + roles[]
  */
 export function hasAnyRole(requiredRoles: string[]): boolean {
   const user = getCurrentUser()
-  if (!user || !user.role) return false
-  return requiredRoles.includes(user.role)
+  if (!user) return false
+
+  const roles = [user.role, ...(user.roles ?? [])].filter(Boolean) as string[]
+  return requiredRoles.some((r) => roles.includes(r))
 }
 
 /**

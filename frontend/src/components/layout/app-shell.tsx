@@ -117,8 +117,26 @@ export function AppShell({
   // Helper: does user have at least one of the given roles?
   const hasAnyRole = (required?: string[]) => {
     if (!required || required.length === 0) return true; // no restriction
-    if (!user || !user.role) return false;
-    return required.includes(user.role);
+    if (!user) return false;
+
+    const normalize = (role?: string) =>
+      role ? role.toLowerCase().replace(/[\s_]+/g, '').trim() : '';
+
+    const userRoles = [
+      user.role,
+      ...(user.roles ?? []),
+    ]
+      .filter(Boolean)
+      .map((r) => normalize(r));
+
+    const userPermissions = (user.permissions ?? []).map((p) =>
+      normalize(p),
+    );
+
+    const req = required.map((r) => normalize(r));
+    const roleMatch = req.some((r) => userRoles.includes(r));
+    const permMatch = userPermissions.includes('manageallprofiles');
+    return roleMatch || permMatch;
   };
 
   // Which nav sections should be visible?
