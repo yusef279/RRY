@@ -1,8 +1,8 @@
 "use client";
-
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { Upload } from "lucide-react";
 
 import { AppShell } from "@/components/layout/app-shell";
 import {
@@ -16,6 +16,17 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+
 import { api } from "@/lib/api";
 import { getCurrentUser } from "@/lib/auth";
 import type { EmployeeProfile } from "@/types/employee";
@@ -27,6 +38,20 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [history, setHistory] = useState<any[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+
+  // Edit state
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    personalEmail: "",
+    mobilePhone: "",
+    homePhone: "",
+    address: {
+      streetAddress: "",
+      city: "",
+      country: "",
+    },
+    biography: "",
+  });
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -124,12 +149,72 @@ export default function ProfilePage() {
   const positionName =
     typeof profile?.primaryPositionId === "object"
       ? ((profile.primaryPositionId as any).title ||
-          (profile.primaryPositionId as any).code ||
-          "Not set")
+        (profile.primaryPositionId as any).code ||
+        "Not set")
       : ((profile as any)?.position?.title ||
-          (profile as any)?.position?.name ||
-          (profile as any)?.position?.code ||
-          "Not set");
+        (profile as any)?.position?.name ||
+        (profile as any)?.position?.code ||
+        "Not set");
+
+  const openEdit = () => {
+    setEditForm({
+      personalEmail: profile?.personalEmail || "",
+      mobilePhone: profile?.mobilePhone || "",
+      homePhone: profile?.homePhone || "",
+      address: {
+        streetAddress: profile?.address?.streetAddress || "",
+        city: profile?.address?.city || "",
+        country: profile?.address?.country || "",
+      },
+      biography: profile?.biography || "",
+    });
+    setEditOpen(true);
+  };
+
+  const handleSaveProfile = async () => {
+    if (!profile?._id) return;
+    try {
+      // Use employeeId from profile (which is the _id in this context usually, or we use route param)
+      // The endpoint is PATCH /employee-profile/:id/self-service
+      const res = await api.patch(
+        `/employee-profile/${profile._id}/self-service`,
+        editForm,
+      );
+      setProfile(res.data);
+      setEditOpen(false);
+      toast.success("Profile updated successfully.");
+    } catch (error: any) {
+      console.error(error);
+      toast.error(
+        error?.response?.data?.message || "Failed to update profile.",
+      );
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !profile?._id) return;
+
+    const formData = new FormData();
+    formData.append("profilePicture", file);
+
+    const toastId = toast.loading("Uploading...");
+
+    try {
+      const res = await api.post(
+        `/employee-profile/${profile._id}/profile-picture`,
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        },
+      );
+      setProfile(res.data);
+      toast.success("Profile picture updated.", { id: toastId });
+    } catch (error: any) {
+      console.error(error);
+      toast.error("Failed to upload profile picture.", { id: toastId });
+    }
+  };
 
   return (
     <AppShell title="My profile">
@@ -149,12 +234,23 @@ export default function ProfilePage() {
         <div className="grid gap-6 lg:grid-cols-[320px,1fr]">
           <Card>
             <CardHeader className="flex flex-row items-center gap-4">
-              <Avatar className="h-14 w-14">
-                <AvatarImage src={photoSrc} alt="Profile picture" />
-                <AvatarFallback className="text-base font-semibold">
-                  {initials.toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
+              <div className="relative">
+                <Avatar className="h-24 w-24">
+                  <AvatarImage src={photoSrc} alt="Profile picture" />
+                  <AvatarFallback className="text-xl font-semibold">
+                    {initials.toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <label className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm cursor-pointer hover:bg-primary/90 transition-colors">
+                  <Upload className="h-4 w-4" />
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                  />
+                </label>
+              </div>
               <div>
                 <CardTitle className="text-xl">
                   {fullName.trim() || "Employee"}
@@ -269,6 +365,9 @@ export default function ProfilePage() {
               </div>
 
               <div className="flex justify-end gap-3">
+                <Button variant="outline" onClick={openEdit}>
+                  Edit Contact Info
+                </Button>
                 <Button variant="default" onClick={() => router.push("/profile/requests")}>
                   Request Profile Changes
                 </Button>
@@ -277,6 +376,102 @@ export default function ProfilePage() {
           </Card>
         </div>
       )}
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Profile</DialogTitle>
+            <DialogDescription>
+              Update your contact information and biography. These changes are applied immediately.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Personal Email</Label>
+                <Input
+                  value={editForm.personalEmail}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, personalEmail: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Mobile Phone</Label>
+                <Input
+                  value={editForm.mobilePhone}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, mobilePhone: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Home Phone</Label>
+                <Input
+                  value={editForm.homePhone}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, homePhone: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Address</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  placeholder="Street Address"
+                  value={editForm.address.streetAddress}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      address: { ...editForm.address, streetAddress: e.target.value },
+                    })
+                  }
+                />
+                <Input
+                  placeholder="City"
+                  value={editForm.address.city}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      address: { ...editForm.address, city: e.target.value },
+                    })
+                  }
+                />
+                <Input
+                  placeholder="Country"
+                  value={editForm.address.country}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      address: { ...editForm.address, country: e.target.value },
+                    })
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Biography</Label>
+              <Textarea
+                rows={4}
+                value={editForm.biography}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, biography: e.target.value })
+                }
+                placeholder="Tell us about yourself..."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveProfile}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }

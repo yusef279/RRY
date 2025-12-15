@@ -71,7 +71,7 @@ export class OrganizationStructureService {
 
     @InjectModel(EmployeeProfile.name)
     private readonly employeeModel: Model<EmployeeProfileDocument>,
-  ) {}
+  ) { }
 
   // ============================================================
   // UTILITIES
@@ -529,39 +529,58 @@ export class OrganizationStructureService {
   // ============================================================
 
   async createChangeRequest(dto: CreateStructureChangeRequestDto) {
-    const emp = await this.employeeModel.findById(dto.requestedByEmployeeId);
-    if (!emp) throw new NotFoundException('requestedByEmployeeId does not exist.');
+    console.log('Service createChangeRequest called with:', JSON.stringify(dto, null, 2));
 
-    const requestNumber = dto.requestNumber ?? this.generateReqNumber();
+    try {
+      if (!dto.requestedByEmployeeId) {
+        throw new BadRequestException('requestedByEmployeeId is required');
+      }
 
-    const created = await this.requestModel.create({
-      requestNumber,
-      requestType: dto.requestType,
-      requestedByEmployeeId: new Types.ObjectId(dto.requestedByEmployeeId),
-      targetDepartmentId: dto.targetDepartmentId
+      const emp = await this.employeeModel.findById(dto.requestedByEmployeeId);
+      if (!emp) {
+        console.error('Employee not found:', dto.requestedByEmployeeId);
+        throw new NotFoundException('requestedByEmployeeId does not exist.');
+      }
+
+      const requestNumber = dto.requestNumber ?? this.generateReqNumber();
+
+      // Defensive ObjectId creation
+      const targetDepartmentId = dto.targetDepartmentId && dto.targetDepartmentId.trim() !== ''
         ? new Types.ObjectId(dto.targetDepartmentId)
-        : undefined,
-      targetPositionId: dto.targetPositionId
+        : undefined;
+
+      const targetPositionId = dto.targetPositionId && dto.targetPositionId.trim() !== ''
         ? new Types.ObjectId(dto.targetPositionId)
-        : undefined,
-      details: dto.details ? JSON.stringify(dto.details) : undefined,
-      reason: dto.reason,
-      status: StructureRequestStatus.SUBMITTED,
-      submittedAt: new Date(),
-    });
+        : undefined;
 
-    await this.log({
-      action: ChangeLogAction.CREATED,
-      entityType: 'StructureChangeRequest',
-      entityId: created._id,
-      after: created.toObject(),
-      summary: `Change request ${requestNumber} created`,
-      performedByEmployeeId: dto.requestedByEmployeeId,
-    });
+      const created = await this.requestModel.create({
+        requestNumber,
+        requestType: dto.requestType,
+        requestedByEmployeeId: new Types.ObjectId(dto.requestedByEmployeeId),
+        targetDepartmentId,
+        targetPositionId,
+        details: dto.details ? JSON.stringify(dto.details) : undefined,
+        reason: dto.reason,
+        status: StructureRequestStatus.SUBMITTED,
+        submittedAt: new Date(),
+      });
 
-    await this.notify('STRUCTURE_CHANGE_SUBMITTED', created);
+      await this.log({
+        action: ChangeLogAction.CREATED,
+        entityType: 'StructureChangeRequest',
+        entityId: created._id,
+        after: created.toObject(),
+        summary: `Change request ${requestNumber} created`,
+        performedByEmployeeId: dto.requestedByEmployeeId,
+      });
 
-    return created;
+      await this.notify('STRUCTURE_CHANGE_SUBMITTED', created);
+
+      return created;
+    } catch (error) {
+      console.error('Error in createChangeRequest:', error);
+      throw error;
+    }
   }
 
   async getPendingChangeRequests() {
@@ -583,8 +602,35 @@ export class OrganizationStructureService {
     return req;
   }
 
+  async getMyChangeRequests(employeeId: string) {
+    return this.requestModel
+      .find({ requestedByEmployeeId: new Types.ObjectId(employeeId) })
+      .sort({ submittedAt: -1 })
+      .lean();
+  }
+
   private async applyApproved(req: StructureChangeRequestDocument) {
     switch (req.requestType) {
+      case StructureRequestType.NEW_POSITION:
+        if (req.details) {
+          const data = JSON.parse(req.details);
+          await this.createPosition({
+            ...data,
+            performedByEmployeeId: req.requestedByEmployeeId.toString(),
+          });
+        }
+        break;
+
+      case StructureRequestType.NEW_DEPARTMENT:
+        if (req.details) {
+          const data = JSON.parse(req.details);
+          await this.createDepartment({
+            ...data,
+            performedByEmployeeId: req.requestedByEmployeeId.toString(),
+          });
+        }
+        break;
+
       case StructureRequestType.UPDATE_POSITION:
         if (req.targetPositionId && req.details) {
           const data = JSON.parse(req.details);
@@ -600,14 +646,20 @@ export class OrganizationStructureService {
             );
           }
 
-          await this.updatePosition(req.targetPositionId.toString(), data);
+          await this.updatePosition(req.targetPositionId.toString(), {
+            ...data,
+            performedByEmployeeId: req.requestedByEmployeeId.toString(),
+          });
         }
         break;
 
       case StructureRequestType.UPDATE_DEPARTMENT:
         if (req.targetDepartmentId && req.details) {
           const data = JSON.parse(req.details);
-          await this.updateDepartment(req.targetDepartmentId.toString(), data);
+          await this.updateDepartment(req.targetDepartmentId.toString(), {
+            ...data,
+            performedByEmployeeId: req.requestedByEmployeeId.toString(),
+          });
         }
         break;
 
@@ -616,7 +668,7 @@ export class OrganizationStructureService {
           await this.deactivatePosition(req.targetPositionId.toString(), {
             closedAt: new Date().toISOString(),
             reason: req.reason,
-            performedByEmployeeId: undefined,
+            performedByEmployeeId: req.requestedByEmployeeId.toString(),
           });
         }
         break;
@@ -708,5 +760,13 @@ export class OrganizationStructureService {
     });
 
     return req;
+  }
+
+  async getChangeLogs() {
+    return this.logModel
+      .find()
+      .sort({ createdAt: -1 })
+      .populate('performedByEmployeeId', 'firstName lastName email')
+      .lean();
   }
 }

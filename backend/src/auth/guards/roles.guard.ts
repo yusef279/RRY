@@ -9,10 +9,11 @@ import { Reflector } from '@nestjs/core';
 import { PERMISSIONS_KEY } from '../decorators/roles.decorators';
 import { Permission, ROLE_PERMISSIONS } from '../permissions.constant';
 import { AuthUser } from '../auth-user.interface';
+import { SystemRole } from '../../employee-profile/enums/employee-profile.enums';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
-  constructor(private reflector: Reflector) {}
+  constructor(private reflector: Reflector) { }
 
   canActivate(context: ExecutionContext): boolean {
     const requiredPermissions =
@@ -33,6 +34,13 @@ export class RolesGuard implements CanActivate {
 
     // ✅ Collect roles (primary + multi-role)
     const rolesToCheck = [user.role, ...(user.roles ?? [])].filter(Boolean);
+
+    // ✅ SYSTEM_ADMIN always has full access - bypass all permission checks
+    const isSystemAdmin = rolesToCheck.some((r) => r === SystemRole.SYSTEM_ADMIN);
+    if (isSystemAdmin) {
+      console.log('✅ SYSTEM_ADMIN bypass: granting access to', request.url);
+      return true;
+    }
 
     // ✅ Collect permissions:
     // 1) embedded permissions (JWT) if present

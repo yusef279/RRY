@@ -37,7 +37,7 @@ import type { AuthUser } from '../auth';
 @Controller('employee-profile')
 @UseGuards(JwtAuthGuard)
 export class EmployeeProfileController {
-  constructor(private readonly employeeProfileService: EmployeeProfileService) {}
+  constructor(private readonly employeeProfileService: EmployeeProfileService) { }
 
   /* =========================================================
       Phase III: HR/Admin Processing & Master Data
@@ -155,8 +155,11 @@ export class EmployeeProfileController {
       );
     }
 
+    // Pass departmentId for fallback matching
     return this.employeeProfileService.getTeamBriefBySupervisorPosition(
       supervisorPositionId,
+      user.departmentId,
+      user.employeeId,
     );
   }
 
@@ -172,7 +175,17 @@ export class EmployeeProfileController {
    */
   @Get(':id')
   getEmployeeProfile(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    if (user.employeeId !== id && !this.isHrOrAdmin(user)) {
+    const isAdmin = this.isHrOrAdmin(user);
+    console.log('🔍 getEmployeeProfile check:', {
+      requestedId: id,
+      userEmployeeId: user.employeeId,
+      userRole: user.role,
+      userRoles: user.roles,
+      isHrOrAdmin: isAdmin,
+    });
+
+    if (user.employeeId !== id && !isAdmin) {
+      console.log('❌ Access denied: not own profile and not HR/Admin');
       throw new ForbiddenException();
     }
     return this.employeeProfileService.getEmployeeProfileById(id);
@@ -216,16 +229,67 @@ export class EmployeeProfileController {
     return this.employeeProfileService.getMyChangeRequests(id);
   }
 
+  /* ---------- Self-Service Profile Picture Upload ---------- */
+  @Post(':id/profile-picture')
+  @UseGuards(PermissionsGuard)
+  @Permissions(Permission.EDIT_OWN_PROFILE)
+  @UseInterceptors(
+    FileInterceptor('profilePicture', {
+      storage: diskStorage({
+        destination: './uploads/profile-pictures',
+        filename: (req, file, cb) => {
+          const randomName = Array(32)
+            .fill(null)
+            .map(() => Math.round(Math.random() * 16).toString(16))
+            .join('');
+          cb(null, `${randomName}${extname(file.originalname)}`);
+        },
+      }),
+      limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
+      fileFilter: (req, file, cb) => {
+        if (!file.mimetype.match(/\/(jpg|jpeg|png|gif)$/)) {
+          return cb(new Error('Only image files are allowed!'), false);
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  uploadMyProfilePicture(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: AuthUser,
+  ) {
+    if (user.employeeId !== id) {
+      throw new ForbiddenException(
+        'You can only upload your own profile picture',
+      );
+    }
+    if (!file) {
+      throw new BadRequestException('No file uploaded');
+    }
+    const fileUrl = `/uploads/profile-pictures/${file.filename}`;
+    return this.employeeProfileService.updateProfilePicture(id, fileUrl);
+  }
+
   /* =========================================================
       helpers
      ========================================================= */
 
   private isHrOrAdmin(user: AuthUser): boolean {
-    return [
+    const allowedRoles = [
       UserRole.HR_MANAGER,
       UserRole.HR_ADMIN,
       UserRole.HR_EMPLOYEE,
       UserRole.SYSTEM_ADMIN,
-    ].includes(user.role as UserRole);
+    ];
+
+    // Check primary role
+    if (allowedRoles.includes(user.role as UserRole)) {
+      return true;
+    }
+
+    // Check roles[] array
+    const userRoles = user.roles ?? [];
+    return userRoles.some((r) => allowedRoles.includes(r as UserRole));
   }
 }

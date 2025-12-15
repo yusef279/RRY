@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Building2, GitBranch } from "lucide-react";
+import { Building2, GitBranch, FileText, Check, X, Loader2, History } from "lucide-react";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { api } from "@/lib/api";
@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -28,6 +29,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 type DepartmentStatus = "ACTIVE" | "INACTIVE";
 
@@ -49,6 +59,37 @@ type Position = {
   payGrade?: string;
   status?: PositionStatus;
 };
+
+type RequestType =
+  | "NEW_DEPARTMENT"
+  | "UPDATE_DEPARTMENT"
+  | "NEW_POSITION"
+  | "UPDATE_POSITION"
+  | "CLOSE_POSITION";
+
+interface StructureRequest {
+  _id: string;
+  requestNumber: string;
+  requestType: RequestType;
+  status: string;
+  reason?: string;
+  submittedAt: string;
+  details?: string;
+  requestedByEmployeeId?: string; // ID only
+}
+
+interface AuditLog {
+  _id: string;
+  action: string;
+  entityType: string;
+  summary?: string;
+  performedByEmployeeId?: {
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
+  createdAt: string;
+}
 
 // ---------- helpers ----------
 const safeStr = (v: any) => (v === undefined || v === null ? "" : String(v));
@@ -103,6 +144,8 @@ const normalizePosition = (p: any): Position => {
 export default function AdminOrgStructurePage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
+  const [requests, setRequests] = useState<StructureRequest[]>([]);
+  const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [deptForm, setDeptForm] = useState({ name: "", code: "" });
@@ -117,24 +160,41 @@ export default function AdminOrgStructurePage() {
   const [editingPos, setEditingPos] = useState<Position | null>(null);
   const [deactivatePosId, setDeactivatePosId] = useState<string | null>(null);
 
+  // Review Dialog State
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<StructureRequest | null>(
+    null
+  );
+  const [reviewAction, setReviewAction] = useState<"APPROVE" | "REJECT" | null>(
+    null
+  );
+  const [reviewComment, setReviewComment] = useState("");
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [deptRes, posRes] = await Promise.all([
+        const [deptRes, posRes, reqRes, logRes] = await Promise.all([
           api.get("/organization-structure/departments"),
           api.get("/organization-structure/positions"),
+          api.get("/organization-structure/change-requests/pending"),
+          api.get("/organization-structure/logs"),
         ]);
 
         const dep = Array.isArray(deptRes.data) ? deptRes.data : [];
         const pos = Array.isArray(posRes.data) ? posRes.data : [];
+        const req = Array.isArray(reqRes.data) ? reqRes.data : [];
+        const l = Array.isArray(logRes.data) ? logRes.data : [];
 
         setDepartments(dep.map(normalizeDepartment));
         setPositions(pos.map(normalizePosition));
+        setRequests(req);
+        setLogs(l);
       } catch (error: any) {
         console.error(error);
         toast.error(
           error?.response?.data?.message ||
-            "Failed to load organization structure data.",
+          "Failed to load organization structure data.",
         );
       } finally {
         setLoading(false);
@@ -271,6 +331,52 @@ export default function AdminOrgStructurePage() {
     }
   };
 
+  const openReview = (req: StructureRequest, action: "APPROVE" | "REJECT") => {
+    setSelectedRequest(req);
+    setReviewAction(action);
+    setReviewComment("");
+    setReviewOpen(true);
+  };
+
+  const handleReviewSubmit = async () => {
+    if (!selectedRequest || !reviewAction) return;
+
+    setReviewSubmitting(true);
+    try {
+      const endpoint =
+        reviewAction === "APPROVE" ? "approve" : "reject";
+
+      await api.post(
+        `/organization-structure/change-requests/${selectedRequest._id}/${endpoint}`,
+        { comments: reviewComment }
+      );
+
+      toast.success(`Request ${reviewAction.toLowerCase()}d successfully.`);
+
+      // Remove from list
+      setRequests((prev) => prev.filter((r) => r._id !== selectedRequest._id));
+      setReviewOpen(false);
+
+      // If approved, reload structure data to reflect changes
+      if (reviewAction === "APPROVE") {
+        const [deptRes, posRes] = await Promise.all([
+          api.get("/organization-structure/departments"),
+          api.get("/organization-structure/positions"),
+        ]);
+        setDepartments((deptRes.data || []).map(normalizeDepartment));
+        setPositions((posRes.data || []).map(normalizePosition));
+      }
+
+    } catch (error: any) {
+      console.error(error);
+      toast.error(
+        error?.response?.data?.message || `Failed to ${reviewAction.toLowerCase()} request.`
+      );
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
+
   return (
     <AppShell
       title="Organization structure"
@@ -292,7 +398,7 @@ export default function AdminOrgStructurePage() {
             </p>
           ) : (
             <Tabs defaultValue="tree">
-              <TabsList className="grid w-full grid-cols-3 lg:w-auto">
+              <TabsList className="grid w-full grid-cols-4 lg:w-auto">
                 <TabsTrigger value="tree">
                   <GitBranch className="h-4 w-4 mr-2" />
                   Org Chart
@@ -302,6 +408,19 @@ export default function AdminOrgStructurePage() {
                   Departments
                 </TabsTrigger>
                 <TabsTrigger value="positions">Positions</TabsTrigger>
+                <TabsTrigger value="requests">
+                  <FileText className="h-4 w-4 mr-2" />
+                  Requests
+                  {requests.length > 0 && (
+                    <Badge variant="destructive" className="ml-2 h-5 w-5 rounded-full p-0 flex items-center justify-center text-[10px]">
+                      {requests.length}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="history">
+                  <History className="h-4 w-4 mr-2" />
+                  History
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="tree" className="pt-4">
@@ -621,10 +740,171 @@ export default function AdminOrgStructurePage() {
                   </div>
                 )}
               </TabsContent>
+
+              <TabsContent value="requests" className="pt-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Pending Change Requests</CardTitle>
+                    <CardDescription>
+                      Review and approve/reject structure change requests from managers.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {requests.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
+                        <FileText className="mb-2 h-10 w-10 opacity-20" />
+                        <p>No pending requests.</p>
+                      </div>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Request #</TableHead>
+                            <TableHead>Type</TableHead>
+                            <TableHead>Reason</TableHead>
+                            <TableHead>Date</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {requests.map((req) => (
+                            <TableRow key={req._id}>
+                              <TableCell className="font-medium">
+                                {req.requestNumber}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline">{req.requestType}</Badge>
+                              </TableCell>
+                              <TableCell className="max-w-[200px] truncate">
+                                {req.reason}
+                              </TableCell>
+                              <TableCell>
+                                {new Date(req.submittedAt).toLocaleDateString()}
+                              </TableCell>
+                              <TableCell className="flex items-center justify-end gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                                  onClick={() => openReview(req, "APPROVE")}
+                                >
+                                  <Check className="mr-1 h-3 w-3" />
+                                  Approve
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  onClick={() => openReview(req, "REJECT")}
+                                >
+                                  <X className="mr-1 h-3 w-3" />
+                                  Reject
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="history" className="pt-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Audit History</CardTitle>
+                    <CardDescription>
+                      View the history of changes to the organization structure.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ScrollArea className="h-[600px]">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Action</TableHead>
+                            <TableHead>Entity</TableHead>
+                            <TableHead>Summary</TableHead>
+                            <TableHead>Performed By</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {logs.map((log) => (
+                            <TableRow key={log._id}>
+                              <TableCell className="whitespace-nowrap">
+                                {new Date(log.createdAt).toLocaleString()}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline">{log.action}</Badge>
+                              </TableCell>
+                              <TableCell>{log.entityType}</TableCell>
+                              <TableCell>{log.summary}</TableCell>
+                              <TableCell>
+                                {log.performedByEmployeeId
+                                  ? `${log.performedByEmployeeId.firstName} ${log.performedByEmployeeId.lastName}`
+                                  : "System"}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              </TabsContent>
             </Tabs>
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={reviewOpen} onOpenChange={setReviewOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {reviewAction === "APPROVE" ? "Approve" : "Reject"} Request
+            </DialogTitle>
+            <DialogDescription>
+              {selectedRequest?.requestNumber} - {selectedRequest?.requestType}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {selectedRequest?.details && (
+              <div className="rounded-md bg-muted p-3 text-sm">
+                <p className="font-medium mb-1">Request Details:</p>
+                <pre className="whitespace-pre-wrap text-xs">
+                  {JSON.stringify(JSON.parse(selectedRequest.details), null, 2)}
+                </pre>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label>Comments (Optional)</Label>
+              <Textarea
+                value={reviewComment}
+                onChange={(e) => setReviewComment(e.target.value)}
+                placeholder="Add a note..."
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReviewOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant={reviewAction === "REJECT" ? "destructive" : "default"}
+              onClick={handleReviewSubmit}
+              disabled={reviewSubmitting}
+            >
+              {reviewSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Confirm {reviewAction === "APPROVE" ? "Approval" : "Rejection"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }

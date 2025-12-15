@@ -42,7 +42,7 @@ export class EmployeeProfileService {
 
     @InjectModel(EmployeeSystemRole.name)
     private readonly employeeSystemRoleModel: Model<EmployeeSystemRoleDocument>,
-  ) {}
+  ) { }
 
   // ---------- Admin: Create Employee Profile ----------
 
@@ -219,29 +219,88 @@ export class EmployeeProfileService {
 
   // ---------- Phase II: Manager Insight ----------
 
-  async getTeamBriefBySupervisorPosition(supervisorPositionId: string) {
-    if (!Types.ObjectId.isValid(supervisorPositionId)) {
-      throw new BadRequestException('Invalid supervisor position id');
+  async getTeamBriefBySupervisorPosition(
+    managerPositionId: string,
+    managerDepartmentId?: string,
+    managerEmployeeId?: string,
+  ) {
+    if (!Types.ObjectId.isValid(managerPositionId)) {
+      throw new BadRequestException('Invalid manager position id');
     }
 
-    const employees = await this.employeeProfileModel
-      .find({
-        supervisorPositionId: new Types.ObjectId(supervisorPositionId),
-      })
+    console.log('🔍 getTeamBriefBySupervisorPosition called with:', {
+      managerPositionId,
+      managerDepartmentId,
+      managerEmployeeId,
+    });
+
+    // Find all employees and populate their position to check reportsToPositionId
+    const allEmployees = await this.employeeProfileModel
+      .find({})
       .select(
-        'firstName lastName fullName employeeNumber dateOfHire status primaryPositionId primaryDepartmentId',
+        'firstName lastName fullName employeeNumber dateOfHire status primaryPositionId primaryDepartmentId supervisorPositionId',
       )
       .populate('primaryPositionId')
       .populate('primaryDepartmentId')
+      .lean()
       .exec();
 
-    return employees;
+    console.log('📊 Total employees found:', allEmployees.length);
+
+    const managerPosId = managerPositionId;
+
+    // Filter employees whose position reports to the manager's position
+    // Check both: position.reportsToPositionId AND employee.supervisorPositionId
+    const directReports = allEmployees.filter((emp: any) => {
+      // Exclude the manager themselves
+      if (emp._id?.toString() === managerEmployeeId) {
+        return false;
+      }
+
+      // Check if employee's position reports to manager's position
+      const posReportsTo = emp.primaryPositionId?.reportsToPositionId?.toString();
+      if (posReportsTo === managerPosId) {
+        return true;
+      }
+
+      // Also check employee's direct supervisorPositionId field
+      const empSupervisor = emp.supervisorPositionId?.toString();
+      if (empSupervisor === managerPosId) {
+        return true;
+      }
+
+      return false;
+    });
+
+    console.log('👥 Direct reports found via position hierarchy:', directReports.length);
+
+    // If no position-based matches found, fallback to department-based matching
+    if (directReports.length === 0 && managerDepartmentId) {
+      console.log('🔄 No position-based matches, trying department fallback...');
+
+      const departmentTeam = allEmployees.filter((emp: any) => {
+        // Exclude the manager themselves
+        if (emp._id?.toString() === managerEmployeeId) {
+          return false;
+        }
+
+        // Check if employee is in the same department
+        const empDeptId = emp.primaryDepartmentId?._id?.toString() || emp.primaryDepartmentId?.toString();
+        return empDeptId === managerDepartmentId;
+      });
+
+      console.log('👥 Department-based team found:', departmentTeam.length);
+      return departmentTeam;
+    }
+
+    return directReports;
   }
 
   async searchEmployees(query: string) {
     const regex = new RegExp(query, 'i');
 
-    return this.employeeProfileModel
+    // Find employees with populated department and position
+    const employees = await this.employeeProfileModel
       .find({
         $or: [
           { firstName: regex },
@@ -249,20 +308,84 @@ export class EmployeeProfileService {
           { fullName: regex },
           { employeeNumber: regex },
           { nationalId: regex },
+          { workEmail: regex },
         ],
       })
-      .limit(50)
+      .populate('primaryDepartmentId')
+      .populate('primaryPositionId')
+      .limit(100)
+      .lean()
       .exec();
+
+    // Fetch all system roles for these employees
+    const employeeIds = employees.map((e) => e._id);
+    const systemRoles = await this.employeeSystemRoleModel
+      .find({ employeeProfileId: { $in: employeeIds } })
+      .lean()
+      .exec();
+
+    // Create a map of employeeId -> roles[]
+    const rolesMap = new Map<string, string[]>();
+    for (const sr of systemRoles) {
+      rolesMap.set(sr.employeeProfileId.toString(), sr.roles || []);
+    }
+
+    // Map to frontend expected format
+    return employees.map((emp: any) => ({
+      _id: emp._id.toString(),
+      firstName: emp.firstName,
+      lastName: emp.lastName,
+      fullName: emp.fullName,
+      employeeNumber: emp.employeeNumber,
+      workEmail: emp.workEmail,
+      status: emp.status,
+      departmentName: emp.primaryDepartmentId?.name || null,
+      positionTitle: emp.primaryPositionId?.title || null,
+      systemRoles: rolesMap.get(emp._id.toString()) || [],
+      profilePictureUrl: emp.profilePictureUrl,
+    }));
   }
 
   // ---------- Phase III: HR/Admin Processing & Master Data ----------
 
   async getPendingChangeRequests() {
     // still used by /employee-profile/admin/change-requests/pending
-    return this.changeRequestModel
+    const requests = await this.changeRequestModel
       .find({ status: ProfileChangeStatus.PENDING })
+      .populate('employeeProfileId', 'firstName lastName employeeNumber')
       .sort({ submittedAt: 1 })
       .exec();
+
+    return Promise.all(
+      requests.map(async (req) => {
+        let emp = req.employeeProfileId as any;
+
+        // Fallback: if populate failed, emp might be just the ID or null
+        // We try to fetch it manually to be sure.
+        if ((!emp || !emp.firstName) && emp) {
+          try {
+            const empId = emp._id || emp;
+            const found = await this.employeeProfileModel
+              .findById(empId)
+              .select('firstName lastName employeeNumber');
+            if (found) {
+              emp = found;
+            }
+          } catch (err) {
+            console.warn('Failed to manual lookup employee for request', req._id);
+          }
+        }
+
+        return {
+          ...req.toObject(),
+          employeeProfileId: emp?._id ? emp._id.toString() : emp?.toString(),
+          employeeName: emp?.firstName
+            ? `${emp.firstName} ${emp.lastName}`
+            : 'Unknown employee',
+          employeeNumber: emp?.employeeNumber,
+        };
+      }),
+    );
   }
 
   async reviewChangeRequest(
@@ -559,6 +682,26 @@ export class EmployeeProfileService {
       throw new NotFoundException('Employee profile not found');
     }
 
+    // Delete old file if it exists and is a local file
+    if (
+      employee.profilePictureUrl &&
+      employee.profilePictureUrl.startsWith('/uploads/')
+    ) {
+      try {
+        // Assuming uploads is in the project root, and we are in dist/src/...
+        // or src/...
+        // Better to use process.cwd()
+        const fs = require('fs');
+        const path = require('path');
+        const oldPath = path.join(process.cwd(), employee.profilePictureUrl);
+        if (fs.existsSync(oldPath)) {
+          fs.unlinkSync(oldPath);
+        }
+      } catch (err) {
+        console.warn('Failed to delete old profile picture:', err);
+      }
+    }
+
     employee.profilePictureUrl = fileUrl;
     await employee.save();
 
@@ -568,7 +711,7 @@ export class EmployeeProfileService {
   // ---------- helpers ----------
 
 
-  
+
 
   private parseRequestDescription(desc?: string) {
     if (!desc) {

@@ -49,9 +49,12 @@ const navSections: NavSection[] = [
   },
   {
     label: "Manager",
-    items: [{ href: "/manager/team", label: "My team" }],
-    
-    requiredRoles: ["department head", "HR Manager", "System Admin"], // tweak if you want
+    items: [
+      { href: "/manager/team", label: "My team" },
+      { href: "/manager/team/org-tree", label: "Org Tree" },
+      { href: "/manager/team/structure-requests", label: "Structure Requests" },
+    ],
+    requiredRoles: ["department head", "HR Manager", "HR Admin", "System Admin"],
   },
   {
     label: "HR Admin",
@@ -63,34 +66,34 @@ const navSections: NavSection[] = [
     requiredRoles: ["HR Admin", "System Admin"],
   },
   {
-      label: "Performance Admin",
-      items: [
-        { href: "/performance/templates", label: "Templates" },
-        { href: "/performance/cycles", label: "Cycles" },
-        { href: "/performance/assign", label: "Assign appraisals" },
-        { href: "/performance/disputes", label: "Disputes" },
-        { href: "/performance/dashboard", label: "Dashboard" },
-      ],
-      requiredRoles: ["HR Manager", "System Admin"], // tweak if you want
-    },
-    {
-  label: "Performance",
-  items: [
-    { href: "/performance", label: "My performance" },
-    { href: "/performance/cycles", label: "Cycles" },          
-    { href: "/performance/dashboard", label: "Dashboard" },    
-  ],
-  requiredRoles: ["HR Employee"],
-},
-{
-  label: "Your Performance",
-  items: [
-    { href: "/performance", label: "My performance" },
-  ],
-  requiredRoles: ["department employee"],
-},
+    label: "Performance Admin",
+    items: [
+      { href: "/performance/templates", label: "Templates" },
+      { href: "/performance/cycles", label: "Cycles" },
+      { href: "/performance/assign", label: "Assign appraisals" },
+      { href: "/performance/disputes", label: "Disputes" },
+      { href: "/performance/dashboard", label: "Dashboard" },
+    ],
+    requiredRoles: ["HR Manager", "System Admin"], // tweak if you want
+  },
+  {
+    label: "Performance",
+    items: [
+      { href: "/performance", label: "My performance" },
+      { href: "/performance/cycles", label: "Cycles" },
+      { href: "/performance/dashboard", label: "Dashboard" },
+    ],
+    requiredRoles: ["HR Employee"],
+  },
+  {
+    label: "Your Performance",
+    items: [
+      { href: "/performance", label: "My performance" },
+    ],
+    requiredRoles: ["department employee"],
+  },
 
-{
+  {
     label: "Conduct Apprasials", // same label = merges visually
     items: [{ href: "/performance/assignments", label: "Appraise my team" }],
     requiredRoles: ["department head"], // ← only this role
@@ -214,7 +217,7 @@ export function AppShell({
                           className={cn(
                             "w-full justify-start text-sm",
                             active &&
-                              "bg-slate-900 text-slate-50 hover:bg-slate-900"
+                            "bg-slate-900 text-slate-50 hover:bg-slate-900"
                           )}
                         >
                           {item.label}
