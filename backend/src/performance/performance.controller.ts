@@ -30,11 +30,10 @@ import { Permission } from '../auth/permissions.constant';
 import { AuthUser } from '../auth/auth-user.interface';
 import { Request } from 'express';
 import { SystemRole } from '../employee-profile/enums/employee-profile.enums';
-import { JwtAuthGuard, PermissionsGuard } from '../auth';
+import { PermissionsGuard } from '../auth';
 
 @Controller('performance')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
-import type { Request } from 'express';
 
 @Controller('performance')
 //@UseGuards(JwtAuthGuard, RolesGuard) 
