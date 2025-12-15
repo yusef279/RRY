@@ -36,7 +36,8 @@ export enum Permission {
   APPROVE_PAYROLL = 'APPROVE_PAYROLL',
   VIEW_OWN_PAYSLIP = 'VIEW_OWN_PAYSLIP',
 }
-import { SystemRole } from '../employee-profile/enums/employee-profile.enums';
+import { SystemRole } from '../enum';
+
 
 export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
   [SystemRole.SYSTEM_ADMIN]:
@@ -44,10 +45,10 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
 
   [SystemRole.HR_MANAGER]: [
     Permission.MANAGE_ALL_PROFILES,
-    Permission.EDIT_OWN_PROFILE, // ← add this
+    Permission.EDIT_OWN_PROFILE,
     Permission.VIEW_ORG_STRUCTURE,
-    Permission.VIEW_OWN_APPRAISAL, // ← add this
     Permission.MANAGE_APPRAISALS,
+    Permission.VIEW_OWN_APPRAISAL, // ← add this
     Permission.VIEW_APPRAISAL_DASHBOARD,
     Permission.EXPORT_APPRAISAL_REPORTS,
     Permission.RESOLVE_DISPUTE,
@@ -55,8 +56,6 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     Permission.MANAGE_RECRUITMENT,
     Permission.MANAGE_LEAVES,
     Permission.APPROVE_PAYROLL,
-    Permission.EDIT_OWN_PROFILE,
-    Permission.VIEW_TEAM_PROFILES,
   ],
 
   [SystemRole.HR_ADMIN]: [
@@ -69,7 +68,8 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     // Permission.RESOLVE_DISPUTE,
     Permission.MANAGE_ATTENDANCE,
     Permission.MANAGE_LEAVES,
-    Permission.EDIT_OWN_PROFILE,
+
+
   ],
 
   [SystemRole.HR_EMPLOYEE]: [
@@ -78,8 +78,8 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     Permission.VIEW_ORG_STRUCTURE,
     Permission.VIEW_APPLICATIONS,
     Permission.VIEW_OWN_APPRAISAL, // ← add this
-    Permission.MANAGE_APPRAISALS,
-    Permission.VIEW_APPRAISAL_DASHBOARD,
+    Permission.MANAGE_APPRAISALS,              
+    Permission.VIEW_APPRAISAL_DASHBOARD,       
   ],
 
   [SystemRole.PAYROLL_SPECIALIST]: [
@@ -111,7 +111,7 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
 
   [SystemRole.DEPARTMENT_HEAD]: [
     Permission.VIEW_TEAM_PROFILES,
-    Permission.EDIT_OWN_PROFILE,
+    Permission.EDIT_OWN_PROFILE,  
     Permission.VIEW_OWN_APPRAISAL,
     Permission.CONDUCT_APPRAISALS,
     Permission.VIEW_TEAM_ATTENDANCE,
@@ -133,4 +133,3 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
   ],
 };
 
-export { SystemRole as UserRole } from '../employee-profile/enums/employee-profile.enums';

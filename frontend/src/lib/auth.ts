@@ -1,6 +1,7 @@
 'use client'
 
 import { AuthPayload, UserRole } from '@/types/auth'
+import { Permission } from '@/types/permissions'
 
 export const TOKEN_KEY = 'hr_token'
 
@@ -50,6 +51,12 @@ export const isRoleAllowed = (
 ) => {
   if (!allowedRoles || allowedRoles.length === 0) return true
   return !!role && allowedRoles.includes(role)
+}
+
+/* NEW – fine-grained permission helper */
+export function hasPermission(user: AuthPayload | null, perm: Permission): boolean {
+  if (!user || !user.permissions) return false
+  return user.permissions.includes(perm)
 }
 
 /**
