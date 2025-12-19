@@ -174,6 +174,8 @@ export class EmployeeProfileController {
    * - HR/Admin can view other employees
    */
   @Get(':id')
+  @UseGuards(PermissionsGuard) // ← add this
+@Permissions(Permission.CONDUCT_APPRAISALS) // ← add this
   getEmployeeProfile(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     const isAdmin = this.isHrOrAdmin(user);
     console.log('🔍 getEmployeeProfile check:', {

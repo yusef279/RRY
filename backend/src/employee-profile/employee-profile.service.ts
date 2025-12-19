@@ -296,57 +296,61 @@ export class EmployeeProfileService {
     return directReports;
   }
 
-  async searchEmployees(query: string) {
-    const regex = new RegExp(query, 'i');
+// In employee-profile.service.ts
+// Find this function and update it:
 
-    // Find employees with populated department and position
-    const employees = await this.employeeProfileModel
-      .find({
-        $or: [
-          { firstName: regex },
-          { lastName: regex },
-          { fullName: regex },
-          { employeeNumber: regex },
-          { nationalId: regex },
-          { workEmail: regex },
-        ],
-      })
-      .populate('primaryDepartmentId')
-      .populate('primaryPositionId')
-      .limit(100)
-      .lean()
-      .exec();
+async searchEmployees(query: string) {
+  const regex = new RegExp(query, 'i');
 
-    // Fetch all system roles for these employees
-    const employeeIds = employees.map((e) => e._id);
-    const systemRoles = await this.employeeSystemRoleModel
-      .find({ employeeProfileId: { $in: employeeIds } })
-      .lean()
-      .exec();
+  const employees = await this.employeeProfileModel
+    .find({
+      $or: [
+        { firstName: regex },
+        { lastName: regex },
+        { fullName: regex },
+        { employeeNumber: regex },
+        { nationalId: regex },
+        { workEmail: regex },
+      ],
+    })
+    .select(
+      'firstName lastName fullName employeeNumber workEmail status profilePictureUrl ' +
+      'primaryDepartmentId primaryPositionId supervisorPositionId'  // ← ADDED supervisorPositionId
+    )
+    .populate('primaryDepartmentId', 'name')
+    .populate('primaryPositionId', 'title')
+    .limit(100)
+    .lean()
+    .exec();
 
-    // Create a map of employeeId -> roles[]
-    const rolesMap = new Map<string, string[]>();
-    for (const sr of systemRoles) {
-      rolesMap.set(sr.employeeProfileId.toString(), sr.roles || []);
-    }
+  const employeeIds = employees.map((e) => e._id);
+  const systemRoles = await this.employeeSystemRoleModel
+    .find({ employeeProfileId: { $in: employeeIds } })
+    .lean()
+    .exec();
 
-    // Map to frontend expected format
-    return employees.map((emp: any) => ({
-      _id: emp._id.toString(),
-      firstName: emp.firstName,
-      lastName: emp.lastName,
-      fullName: emp.fullName,
-      employeeNumber: emp.employeeNumber,
-      workEmail: emp.workEmail,
-      status: emp.status,
-      departmentName: emp.primaryDepartmentId?.name || null,
-      positionTitle: emp.primaryPositionId?.title || null,
-      systemRoles: rolesMap.get(emp._id.toString()) || [],
-      profilePictureUrl: emp.profilePictureUrl,
-    }));
+  const rolesMap = new Map<string, string[]>();
+  for (const sr of systemRoles) {
+    rolesMap.set(sr.employeeProfileId.toString(), sr.roles || []);
   }
 
-  // ---------- Phase III: HR/Admin Processing & Master Data ----------
+  return employees.map((emp: any) => ({
+    _id: emp._id.toString(),
+    firstName: emp.firstName,
+    lastName: emp.lastName,
+    fullName: emp.fullName,
+    employeeNumber: emp.employeeNumber,
+    workEmail: emp.workEmail,
+    status: emp.status,
+    departmentName: emp.primaryDepartmentId?.name || null,
+    positionTitle: emp.primaryPositionId?.title || null,
+    systemRoles: rolesMap.get(emp._id.toString()) || [],
+    profilePictureUrl: emp.profilePictureUrl,
+    primaryDepartmentId: emp.primaryDepartmentId?._id || null,
+    primaryPositionId: emp.primaryPositionId?._id || null,
+    supervisorPositionId: emp.supervisorPositionId || null,  // ← ADDED to return value
+  }));
+}  // ---------- Phase III: HR/Admin Processing & Master Data ----------
 
   async getPendingChangeRequests() {
     // still used by /employee-profile/admin/change-requests/pending

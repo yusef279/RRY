@@ -5,13 +5,31 @@ const api = axios.create({
   withCredentials: true, // send/receive cookies
 });
 
-// If there's a token in localStorage, use it on initial load
-if (typeof window !== "undefined") {
-  const token = localStorage.getItem("access_token");
-  if (token) {
-    api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+// Request interceptor - add token to EVERY request
+api.interceptors.request.use((config) => {
+  if (typeof window !== "undefined") {
+    const token = localStorage.getItem("access_token");
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
   }
-}
+  return config;
+});
+
+// Optional: Response interceptor for handling 401s
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Token expired, clear it and redirect to login
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("access_token");
+        window.location.href = "/login";
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 export { api };
 export default api;

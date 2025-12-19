@@ -65,39 +65,49 @@ const navSections: NavSection[] = [
     ],
     requiredRoles: ["HR Admin", "System Admin"],
   },
-  {
-    label: "Performance Admin",
-    items: [
-      { href: "/performance/templates", label: "Templates" },
-      { href: "/performance/cycles", label: "Cycles" },
-      { href: "/performance/assign", label: "Assign appraisals" },
-      { href: "/performance/disputes", label: "Disputes" },
-      { href: "/performance/dashboard", label: "Dashboard" },
-    ],
-    requiredRoles: ["HR Manager", "System Admin"], // tweak if you want
-  },
-  {
-    label: "Performance",
-    items: [
-      { href: "/performance", label: "My performance" },
-      { href: "/performance/cycles", label: "Cycles" },
-      { href: "/performance/dashboard", label: "Dashboard" },
-    ],
-    requiredRoles: ["HR Employee"],
-  },
-  {
+    {
     label: "Your Performance",
     items: [
       { href: "/performance", label: "My performance" },
     ],
-    requiredRoles: ["department employee"],
+    requiredRoles: ["department employee", "HR Employee"],
   },
 
   {
-    label: "Conduct Apprasials", // same label = merges visually
-    items: [{ href: "/performance/assignments", label: "Appraise my team" }],
-    requiredRoles: ["department head"], // ← only this role
+    label: "Performance Manager",
+    items: [
+      { href: "/performance/templates", label: "Templates" },
+      { href: "/performance/cycles", label: "Cycles" },
+      { href: "/performance/assign", label: "Assign appraisals" },
+      { href: "/performance/records", label: "Records" },
+      { href: "/performance/disputes", label: "Disputes" },
+      { href: "/performance/dashboard", label: "Dashboard" },
+    ],
+    requiredRoles: ["HR Manager"], 
   },
+  {
+    label: "Performance",
+    items: [
+      { href: "/performance/templates", label: "Templates" },
+      { href: "/performance/cycles", label: "Cycles" },
+      { href: "/performance/assign", label: "Assign appraisals" },
+      { href: "/performance/records", label: "Records" },
+      { href: "/performance/dashboard", label: "Dashboard" },
+    ],
+    requiredRoles: ["HR Employee"],
+  },
+
+  {
+    label: "Conduct Apprasials",
+    items: [{ href: "/performance/conduct", label: "Appraise my team" }],
+    requiredRoles: ["department head"], 
+  },
+    {
+    label: "History Archives",
+    items: [{ href: "/performance/history", label: "View archived records" }],
+    requiredRoles: ["System Admin"], 
+  },
+
 ];
 
 export function AppShell({

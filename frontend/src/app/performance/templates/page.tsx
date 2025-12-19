@@ -1,22 +1,29 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash, X } from 'lucide-react';
+import { Plus, Pencil, Trash, X, Eye, Filter, Search, Check, AlertCircle, Users, FileText, BarChart } from 'lucide-react';
 import { toast } from 'sonner';
 import { AppShell } from '@/components/layout/app-shell';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Separator } from '@/components/ui/separator';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { api } from '@/lib/api';
 import {
   AppraisalTemplateType,
   AppraisalRatingScaleType,
 } from '@/types/performance';
-import type { Department, Position } from '@/types/org-structure'; // ← shared file that has description
+import type { Department, Position } from '@/types/org-structure';
+
 /* ----------  TYPES + CONSTANTS  ---------- */
 type Criterion = {
   key: string;
@@ -26,6 +33,7 @@ type Criterion = {
   maxScore?: number;
   required?: boolean;
 };
+
 type Template = {
   _id: string;
   name: string;
@@ -41,22 +49,29 @@ type Template = {
   criteria?: Criterion[];
   applicableDepartmentIds?: string[];
   applicablePositionIds?: string[];
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 const TEMPLATE_TYPES = Object.values(AppraisalTemplateType);
 const SCALE_TYPES = Object.values(AppraisalRatingScaleType);
-const SCALE_MAP: Record<AppraisalRatingScaleType, { min: number; max: number }> = {
-  THREE_POINT: { min: 1, max: 3 },
-  FIVE_POINT: { min: 1, max: 5 },
-  TEN_POINT: { min: 1, max: 10 },
+const SCALE_MAP: Record<AppraisalRatingScaleType, { min: number; max: number; label: string }> = {
+  THREE_POINT: { min: 1, max: 3, label: '3-Point (1-3)' },
+  FIVE_POINT: { min: 1, max: 5, label: '5-Point (1-5)' },
+  TEN_POINT: { min: 1, max: 10, label: '10-Point (1-10)' },
 };
 
 /* ----------  COMPONENT  ---------- */
 export default function TemplatesPage() {
-  const [rows, setRows] = useState<Template[]>([]);
-  const [open, setOpen] = useState(false);
-  const [depts, setDepts] = useState<Department[]>([]);
-  const [pos, setPos] = useState<Position[]>([]);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [filteredTemplates, setFilteredTemplates] = useState<Template[]>([]);
+  const [openDialog, setOpenDialog] = useState(false);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [positions, setPositions] = useState<Position[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [selectedType, setSelectedType] = useState<string>('all');
 
   /* form state */
   const [form, setForm] = useState({
@@ -71,26 +86,67 @@ export default function TemplatesPage() {
   });
   const [editId, setEditId] = useState<string | null>(null);
 
-  /* ----------  DATA  ---------- */
-  const load = () =>
-    Promise.all([
-      api.get('/performance/templates'),
-      api.get('/organization-structure/departments'),
-      api.get('/organization-structure/positions'),
-    ])
-      .then(([t, d, p]) => {
-        setRows(Array.isArray(t.data) ? t.data : []);
-        setDepts(Array.isArray(d.data) ? d.data : []);
-        setPos(Array.isArray(p.data) ? p.data : []);
-      })
-      .catch(() => toast.error('Load failed'));
+  /* ----------  DATA LOADING  ---------- */
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const [templatesRes, deptsRes, positionsRes] = await Promise.all([
+        api.get('/performance/templates'),
+        api.get('/organization-structure/departments'),
+        api.get('/organization-structure/positions'),
+      ]);
+
+      const templatesData = Array.isArray(templatesRes.data) ? templatesRes.data : [];
+      setTemplates(templatesData);
+      setFilteredTemplates(templatesData);
+      setDepartments(Array.isArray(deptsRes.data) ? deptsRes.data : []);
+      setPositions(Array.isArray(positionsRes.data) ? positionsRes.data : []);
+    } catch (error) {
+      toast.error('Failed to load data');
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    load();
+    loadData();
   }, []);
 
-  /* ----------  ACTIONS  ---------- */
-  const save = async () => {
+  /* ----------  FILTERING  ---------- */
+  useEffect(() => {
+    let filtered = templates;
+
+    // Search filter
+    if (searchTerm) {
+      filtered = filtered.filter(template =>
+        template.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        template.description?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    // Status filter
+    if (activeFilter !== 'all') {
+      filtered = filtered.filter(template => 
+        activeFilter === 'active' ? template.isActive : !template.isActive
+      );
+    }
+
+    // Type filter
+    if (selectedType !== 'all') {
+      filtered = filtered.filter(template => template.templateType === selectedType);
+    }
+
+    setFilteredTemplates(filtered);
+  }, [searchTerm, activeFilter, selectedType, templates]);
+
+  /* ----------  TEMPLATE ACTIONS  ---------- */
+  const handleSave = async () => {
+    if (!form.name.trim()) {
+      toast.error('Template name is required');
+      return;
+    }
+
     const payload = {
       name: form.name,
       description: form.description,
@@ -101,25 +157,72 @@ export default function TemplatesPage() {
       applicablePositionIds: form.posIds,
       criteria: form.criteria,
     };
+
     try {
-      if (editId) await api.patch(`/performance/templates/${editId}`, payload);
-      else await api.post('/performance/templates', payload);
-      toast.success('Saved');
-      setOpen(false);
-      load();
+      if (editId) {
+        await api.patch(`/performance/templates/${editId}`, payload);
+        toast.success('Template updated successfully');
+      } else {
+        await api.post('/performance/templates', payload);
+        toast.success('Template created successfully');
+      }
+      setOpenDialog(false);
+      await loadData();
     } catch (e: any) {
       toast.error(e.response?.data?.message || 'Save failed');
     }
   };
 
-  const deactivate = async (id: string) => {
-    await api.patch(`/performance/templates/${id}/deactivate`);
-    toast.success('Deactivated');
-    load();
+  const handleDeactivate = async (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to deactivate "${name}"?`)) {
+      return;
+    }
+
+    try {
+      await api.patch(`/performance/templates/${id}/deactivate`);
+      toast.success('Template deactivated');
+      await loadData();
+    } catch (e: any) {
+      if (e.response?.status === 409) {
+        toast.error('Cannot deactivate: template is used by an active cycle');
+      } else {
+        toast.error(e.response?.data?.message || 'Deactivation failed');
+      }
+    }
+  };
+
+  const openEditDialog = (template: Template) => {
+    setEditId(template._id);
+    setForm({
+      name: template.name,
+      description: template.description || '',
+      templateType: template.templateType || AppraisalTemplateType.ANNUAL,
+      ratingType: template.ratingScale?.type || AppraisalRatingScaleType.FIVE_POINT,
+      instructions: template.instructions || '',
+      deptIds: template.applicableDepartmentIds || [],
+      posIds: template.applicablePositionIds || [],
+      criteria: template.criteria || [],
+    });
+    setOpenDialog(true);
+  };
+
+  const openNewDialog = () => {
+    setEditId(null);
+    setForm({
+      name: '',
+      description: '',
+      templateType: AppraisalTemplateType.ANNUAL,
+      ratingType: AppraisalRatingScaleType.FIVE_POINT,
+      instructions: '',
+      deptIds: [],
+      posIds: [],
+      criteria: [],
+    });
+    setOpenDialog(true);
   };
 
   /* ----------  CRITERIA HANDLERS  ---------- */
-  const addCriterion = () =>
+  const addCriterion = () => {
     setForm({
       ...form,
       criteria: [
@@ -128,311 +231,654 @@ export default function TemplatesPage() {
           key: Date.now().toString(),
           title: '',
           details: '',
-          weight: 0,
+          weight: 10,
           maxScore: SCALE_MAP[form.ratingType].max,
           required: true,
         },
       ],
     });
+  };
 
   const updateCriterion = (idx: number, field: keyof Criterion, val: any) => {
-    const copy = [...form.criteria];
-    copy[idx] = { ...copy[idx], [field]: val };
-    setForm({ ...form, criteria: copy });
+    const updatedCriteria = [...form.criteria];
+    updatedCriteria[idx] = { ...updatedCriteria[idx], [field]: val };
+    setForm({ ...form, criteria: updatedCriteria });
   };
 
   const removeCriterion = (idx: number) => {
-    const copy = [...form.criteria];
-    copy.splice(idx, 1);
-    setForm({ ...form, criteria: copy });
+    const updatedCriteria = [...form.criteria];
+    updatedCriteria.splice(idx, 1);
+    setForm({ ...form, criteria: updatedCriteria });
   };
 
   /* ----------  MULTI-SELECT HELPERS  ---------- */
-  const toggleDept = (id: string) =>
+  const toggleDept = (id: string) => {
     setForm({
       ...form,
       deptIds: form.deptIds.includes(id)
         ? form.deptIds.filter((d) => d !== id)
         : [...form.deptIds, id],
     });
+  };
 
-  const togglePos = (id: string) =>
+  const togglePos = (id: string) => {
     setForm({
       ...form,
       posIds: form.posIds.includes(id)
         ? form.posIds.filter((p) => p !== id)
         : [...form.posIds, id],
     });
+  };
+
+  /* ----------  HELPER FUNCTIONS  ---------- */
+  const getTemplateTypeColor = (type: string) => {
+    switch (type) {
+      case 'ANNUAL': return 'bg-blue-100 text-blue-800';
+      case 'SEMI_ANNUAL': return 'bg-purple-100 text-purple-800';
+      case 'PROBATIONARY': return 'bg-amber-100 text-amber-800';
+      case 'PROJECT': return 'bg-green-100 text-green-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  };
 
   /* ----------  RENDER  ---------- */
   return (
-    <AppShell title="Appraisal templates" allowedRoles={['HR Admin','HR Manager', 'System Admin']}>
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Templates</CardTitle>
-          <Button
-            onClick={() => {
-              setEditId(null);
-              setForm({
-                name: '',
-                description: '',
-                templateType: AppraisalTemplateType.ANNUAL,
-                ratingType: AppraisalRatingScaleType.FIVE_POINT,
-                instructions: '',
-                deptIds: [],
-                posIds: [],
-                criteria: [],
-              });
-              setOpen(true);
-            }}
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            New
-          </Button>
-        </CardHeader>
-        <CardContent>
-          <ScrollArea className="h-[500px]">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Scale</TableHead>
-                  <TableHead>Active</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground">
-                      No templates found
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  rows.map((t) => (
-                    <TableRow key={t._id}>
-                      <TableCell>{t.name}</TableCell>
-                      <TableCell>{t.templateType?.replace('_', ' ') ?? '—'}</TableCell>
-                      <TableCell>
-                        {t.ratingScale
-                          ? `${t.ratingScale.min}-${t.ratingScale.max} (${t.ratingScale.type.replace('_', ' ')})`
-                          : '—'}
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={`px-2 py-1 rounded text-xs ${
-                            t.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                          }`}
-                        >
-                          {t.isActive ? 'Yes' : 'No'}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right flex gap-2 justify-end">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => {
-                            setEditId(t._id);
-                            setForm({
-                              name: t.name,
-                              description: t.description || '',
-                              templateType: t.templateType || AppraisalTemplateType.ANNUAL,
-                              ratingType: t.ratingScale?.type || AppraisalRatingScaleType.FIVE_POINT,
-                              instructions: t.instructions || '',
-                              deptIds: t.applicableDepartmentIds || [],
-                              posIds: t.applicablePositionIds || [],
-                              criteria: t.criteria || [],
-                            });
-                            setOpen(true);
-                          }}
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button size="icon" variant="ghost" onClick={() => deactivate(t._id)}>
-                          <Trash className="w-4 h-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </ScrollArea>
-        </CardContent>
-      </Card>
+    <AppShell title="Appraisal Templates" allowedRoles={['HR Employee', 'HR Manager', 'System Admin']}>
+      <div className="space-y-6">
+        {/* Header Card */}
+        <Card className="border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-2xl font-bold text-gray-900">Appraisal Templates</CardTitle>
+                <CardDescription className="text-gray-600 mt-2">
+                  Create and manage performance appraisal templates. Templates define the criteria and rating scales for evaluations.
+                </CardDescription>
+              </div>
+              <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
+                <FileText className="h-6 w-6 text-blue-600" />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Search templates..."
+                    className="pl-10 w-64"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
+                <Select value={selectedType} onValueChange={setSelectedType}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue placeholder="Filter by type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Types</SelectItem>
+                    {TEMPLATE_TYPES.map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {type.replace('_', ' ')}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button onClick={openNewDialog} className="gap-2">
+                <Plus className="h-4 w-4" />
+                New Template
+              </Button>
+            </div>
 
-      {/* ===============  DIALOG WITH SCROLL  =============== */}
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editId ? 'Edit' : 'New'} template</DialogTitle>
-          </DialogHeader>
+            {/* Quick Stats */}
+            <div className="grid grid-cols-4 gap-4 mt-6">
+              <Card className="bg-white">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-500">Total Templates</p>
+                      <p className="text-2xl font-bold">{templates.length}</p>
+                    </div>
+                    <FileText className="h-8 w-8 text-blue-500" />
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="bg-white">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-500">Active</p>
+                      <p className="text-2xl font-bold">{templates.filter(t => t.isActive).length}</p>
+                    </div>
+                    <Check className="h-8 w-8 text-green-500" />
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="bg-white">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-500">Departments</p>
+                      <p className="text-2xl font-bold">{departments.length}</p>
+                    </div>
+                    <Users className="h-8 w-8 text-purple-500" />
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="bg-white">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-500">Positions</p>
+                      <p className="text-2xl font-bold">{positions.length}</p>
+                    </div>
+                    <BarChart className="h-8 w-8 text-amber-500" />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </CardContent>
+        </Card>
 
-          {/* *******  SCROLLABLE INNER BODY  ******* */}
-          <ScrollArea className="h-[70vh] pr-4">
-            <div className="space-y-4">
-              <Label>Name *</Label>
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-
-              <Label>Description</Label>
-              <Textarea
-                value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
-              />
-
-              <Label>Template type *</Label>
-              <select
-                className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={form.templateType}
-                onChange={(e) => setForm({ ...form, templateType: e.target.value as AppraisalTemplateType })}
-              >
-                {TEMPLATE_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {t.replace('_', ' ')}
-                  </option>
-                ))}
-              </select>
-
-              <Label>Rating scale *</Label>
-              <select
-                className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={form.ratingType}
-                onChange={(e) =>
-                  setForm({ ...form, ratingType: e.target.value as AppraisalRatingScaleType })
-                }
-              >
-                {SCALE_TYPES.map((s) => (
-                  <option key={s} value={s}>
-                    {s.replace('_', ' ')}
-                  </option>
-                ))}
-              </select>
-
-              <Label>Instructions</Label>
-              <Textarea
-                rows={3}
-                value={form.instructions}
-                onChange={(e) => setForm({ ...form, instructions: e.target.value })}
-                placeholder="Guidelines for managers / employees"
-              />
-{/* ----- Applicable departments ----- */}
-<Label>Applicable departments</Label>
-{depts.length === 0 ? (
-  <p className="text-sm text-muted-foreground">No departments available.</p>
-) : (
-  <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto border rounded-md p-2">
-    {depts.map((d) => (
-      <label key={d._id} className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={form.deptIds.includes(d._id ?? '')}
-          onChange={() => toggleDept(d._id ?? '')}
-          className="h-4 w-4 rounded"
-        />
-        {d.name}
-      </label>
-    ))}
-  </div>
-)}
-
-{/* ----- Applicable positions ----- */}
-<Label>Applicable positions</Label>
-{pos.length === 0 ? (
-  <p className="text-sm text-muted-foreground">No positions available.</p>
-) : (
-  <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto border rounded-md p-2">
-    {pos.map((p) => (
-      <label key={p._id} className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={form.posIds.includes(p._id ?? '')}
-          onChange={() => togglePos(p._id ?? '')}
-          className="h-4 w-4 rounded"
-        />
-        {p.title}
-      </label>
-    ))}
-  </div>
-)}
-              <div className="flex items-center justify-between">
-                <Label>Evaluation criteria</Label>
-                <Button size="sm" onClick={addCriterion}>
-                  <Plus className="w-4 h-4 mr-1" /> Add question
+        {/* Templates Table */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Template List</CardTitle>
+                <CardDescription>
+                  Showing {filteredTemplates.length} of {templates.length} templates
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={activeFilter === 'all' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setActiveFilter('all')}
+                >
+                  All
+                </Button>
+                <Button
+                  variant={activeFilter === 'active' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setActiveFilter('active')}
+                >
+                  Active
+                </Button>
+                <Button
+                  variant={activeFilter === 'inactive' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setActiveFilter('inactive')}
+                >
+                  Inactive
                 </Button>
               </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="flex items-center justify-center h-64">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                  <p className="mt-4 text-gray-500">Loading templates...</p>
+                </div>
+              </div>
+            ) : filteredTemplates.length === 0 ? (
+              <div className="text-center py-12 border rounded-lg">
+                <div className="mx-auto w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                  <FileText className="h-8 w-8 text-gray-400" />
+                </div>
+                <h3 className="text-lg font-medium mb-2">No templates found</h3>
+                <p className="text-gray-500 max-w-md mx-auto">
+                  {searchTerm || activeFilter !== 'all' || selectedType !== 'all'
+                    ? 'No templates match your search criteria. Try adjusting your filters.'
+                    : 'Get started by creating your first appraisal template.'}
+                </p>
+                <Button onClick={openNewDialog} className="mt-4">
+                  Create Template
+                </Button>
+              </div>
+            ) : (
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader className="bg-gray-50">
+                    <TableRow>
+                      <TableHead className="font-semibold">Template</TableHead>
+                      <TableHead className="font-semibold">Type</TableHead>
+                      <TableHead className="font-semibold">Rating Scale</TableHead>
+                      <TableHead className="font-semibold">Criteria</TableHead>
+                      <TableHead className="font-semibold">Status</TableHead>
+                      <TableHead className="font-semibold">Last Updated</TableHead>
+                      <TableHead className="font-semibold text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredTemplates.map((template) => (
+                      <TableRow key={template._id} className="hover:bg-gray-50">
+                        <TableCell>
+                          <div>
+                            <p className="font-medium text-gray-900">{template.name}</p>
+                            {template.description && (
+                              <p className="text-sm text-gray-500 truncate max-w-xs">
+                                {template.description}
+                              </p>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={getTemplateTypeColor(template.templateType || '')}>
+                            {template.templateType?.replace('_', ' ') || 'N/A'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {template.ratingScale ? (
+                            <div className="text-sm">
+                              <span className="font-medium">{template.ratingScale.min}-{template.ratingScale.max}</span>
+                              <span className="text-gray-500 ml-2">
+                                ({template.ratingScale.type.replace('_', ' ')})
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">Not set</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {template.criteria?.length || 0} criteria
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${template.isActive ? 'bg-green-500' : 'bg-gray-300'}`} />
+                            <span className={`text-sm ${template.isActive ? 'text-green-700' : 'text-gray-500'}`}>
+                              {template.isActive ? 'Active' : 'Inactive'}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm text-gray-500">
+                            {formatDate(template.updatedAt)}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-8 w-8"
+                                    onClick={() => openEditDialog(template)}
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Edit template</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                    onClick={() => handleDeactivate(template._id, template.name)}
+                                    disabled={!template.isActive}
+                                  >
+                                    <Trash className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Deactivate template</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
-              {form.criteria.map((c, idx) => (
-                <Card key={c.key} className="p-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="col-span-2">
-                      <Label>Question *</Label>
-                      <Input
-                        value={c.title}
-                        onChange={(e) => updateCriterion(idx, 'title', e.target.value)}
-                        placeholder="e.g. Communication Skills"
-                      />
-                    </div>
-                    <div className="col-span-2">
-                      <Label>Details</Label>
-                      <Textarea
-                        rows={2}
-                        value={c.details}
-                        onChange={(e) => updateCriterion(idx, 'details', e.target.value)}
-                        placeholder="Description or examples"
-                      />
-                    </div>
-                    <div>
-                      <Label>Weight %</Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={100}
-                        value={c.weight}
-                        onChange={(e) => updateCriterion(idx, 'weight', Number(e.target.value))}
-                      />
-                    </div>
-                    <div>
-                      <Label>Max score</Label>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={SCALE_MAP[form.ratingType].max}
-                        value={c.maxScore}
-                        onChange={(e) => updateCriterion(idx, 'maxScore', Number(e.target.value))}
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={c.required}
-                        onChange={(e) => updateCriterion(idx, 'required', e.target.checked)}
-                        className="h-4 w-4 rounded"
-                      />
-                      <Label className="!mb-0">Required</Label>
-                    </div>
-                    <div className="text-right">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => removeCriterion(idx)}
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
+      {/* Template Form Dialog */}
+      <Dialog open={openDialog} onOpenChange={setOpenDialog}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
+          <DialogHeader>
+            <DialogTitle className="text-xl">
+              {editId ? 'Edit Template' : 'Create New Template'}
+            </DialogTitle>
+            <DialogDescription>
+              Define the structure, criteria, and settings for your appraisal template.
+            </DialogDescription>
+          </DialogHeader>
+
+          <Tabs defaultValue="basic" className="w-full">
+            <TabsList className="grid grid-cols-4 mb-6">
+              <TabsTrigger value="basic">Basic Info</TabsTrigger>
+              <TabsTrigger value="settings">Settings</TabsTrigger>
+              <TabsTrigger value="criteria">Criteria</TabsTrigger>
+              <TabsTrigger value="applicability">Applicability</TabsTrigger>
+            </TabsList>
+
+            <ScrollArea className="h-[60vh] pr-4">
+              <TabsContent value="basic" className="space-y-4">
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="name" className="font-medium">Template Name *</Label>
+                    <Input
+                      id="name"
+                      value={form.name}
+                      onChange={(e) => setForm({ ...form, name: e.target.value })}
+                      placeholder="e.g., Annual Performance Review"
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="description" className="font-medium">Description</Label>
+                    <Textarea
+                      id="description"
+                      value={form.description}
+                      onChange={(e) => setForm({ ...form, description: e.target.value })}
+                      placeholder="Brief description of this template's purpose"
+                      className="mt-1"
+                      rows={3}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="instructions" className="font-medium">Instructions for Managers</Label>
+                    <Textarea
+                      id="instructions"
+                      value={form.instructions}
+                      onChange={(e) => setForm({ ...form, instructions: e.target.value })}
+                      placeholder="Guidelines and best practices for conducting appraisals"
+                      className="mt-1"
+                      rows={4}
+                    />
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="settings" className="space-y-6">
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="templateType" className="font-medium">Template Type *</Label>
+                    <Select
+                      value={form.templateType}
+                      onValueChange={(value) => setForm({ ...form, templateType: value as AppraisalTemplateType })}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Select template type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TEMPLATE_TYPES.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {type.replace('_', ' ')}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="ratingType" className="font-medium">Rating Scale *</Label>
+                    <Select
+                      value={form.ratingType}
+                      onValueChange={(value) => setForm({ ...form, ratingType: value as AppraisalRatingScaleType })}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Select rating scale" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {SCALE_TYPES.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {SCALE_MAP[type].label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-sm text-gray-500 mt-2">
+                      Selected scale: {SCALE_MAP[form.ratingType].min} to {SCALE_MAP[form.ratingType].max} points
+                    </p>
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="criteria" className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-lg font-medium">Evaluation Criteria</Label>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Define the questions and metrics for performance evaluation
+                    </p>
+                  </div>
+                  <Button onClick={addCriterion} className="gap-2">
+                    <Plus className="h-4 w-4" />
+                    Add Criterion
+                  </Button>
+                </div>
+
+                {form.criteria.length === 0 ? (
+                  <div className="text-center py-8 border-2 border-dashed rounded-lg">
+                    <FileText className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                    <p className="text-gray-500">No criteria added yet</p>
+                    <p className="text-sm text-gray-400 mt-1">
+                      Add criteria to define what will be evaluated
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {form.criteria.map((criterion, idx) => (
+                      <Card key={criterion.key} className="border-l-4 border-l-blue-500">
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="font-medium text-gray-900">Criterion {idx + 1}</span>
+                                {criterion.required && (
+                                  <Badge variant="outline" className="text-xs">Required</Badge>
+                                )}
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                  <Label>Question *</Label>
+                                  <Input
+                                    value={criterion.title}
+                                    onChange={(e) => updateCriterion(idx, 'title', e.target.value)}
+                                    placeholder="e.g., Communication Skills"
+                                    className="mt-1"
+                                  />
+                                </div>
+                                <div>
+                                  <Label>Details & Examples</Label>
+                                  <Textarea
+                                    value={criterion.details}
+                                    onChange={(e) => updateCriterion(idx, 'details', e.target.value)}
+                                    placeholder="Description or examples for guidance"
+                                    className="mt-1"
+                                    rows={2}
+                                  />
+                                </div>
+                                <div>
+                                  <Label>Weight (%)</Label>
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    max={100}
+                                    value={criterion.weight}
+                                    onChange={(e) => updateCriterion(idx, 'weight', Number(e.target.value))}
+                                    className="mt-1"
+                                  />
+                                </div>
+                                <div>
+                                  <Label>Max Score</Label>
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    max={SCALE_MAP[form.ratingType].max}
+                                    value={criterion.maxScore}
+                                    onChange={(e) => updateCriterion(idx, 'maxScore', Number(e.target.value))}
+                                    className="mt-1"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="ml-2 text-red-500 hover:text-red-600 hover:bg-red-50"
+                              onClick={() => removeCriterion(idx)}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                            <div className="flex items-center gap-4">
+                              <div className="flex items-center gap-2">
+                                <Switch
+                                  checked={criterion.required}
+                                  onCheckedChange={(checked) => updateCriterion(idx, 'required', checked)}
+                                />
+                                <Label className="text-sm">Required field</Label>
+                              </div>
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              Weight: {criterion.weight || 0}% • Max: {criterion.maxScore || 0} points
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="applicability" className="space-y-6">
+                <div className="space-y-6">
+                  <div>
+                    <Label className="text-lg font-medium mb-4">Applicable Departments</Label>
+                    {departments.length === 0 ? (
+                      <div className="text-center py-4 border rounded-lg bg-gray-50">
+                        <Users className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                        <p className="text-gray-500">No departments available</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-60 overflow-y-auto p-4 border rounded-lg">
+                        {departments.map((dept) => (
+                          <div
+                            key={dept._id}
+                            className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${form.deptIds.includes(dept._id ?? '')
+                                ? 'border-blue-500 bg-blue-50'
+                                : 'border-gray-200 hover:bg-gray-50'
+                              }`}
+                            onClick={() => toggleDept(dept._id ?? '')}
+                          >
+                            <div className={`w-4 h-4 rounded border flex items-center justify-center ${form.deptIds.includes(dept._id ?? '')
+                                ? 'bg-blue-500 border-blue-500'
+                                : 'border-gray-300'
+                              }`}>
+                              {form.deptIds.includes(dept._id ?? '') && (
+                                <Check className="h-3 w-3 text-white" />
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-medium">{dept.name}</p>
+                              <p className="text-sm text-gray-500">{dept.description}</p>
+                            </div>
+                            <Badge variant="outline">{dept.employeeCount || 0} employees</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <Label className="text-lg font-medium mb-4">Applicable Positions</Label>
+                    {positions.length === 0 ? (
+                      <div className="text-center py-4 border rounded-lg bg-gray-50">
+                        <BarChart className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                        <p className="text-gray-500">No positions available</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-60 overflow-y-auto p-4 border rounded-lg">
+                        {positions.map((position) => (
+                          <div
+                            key={position._id}
+                            className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${form.posIds.includes(position._id ?? '')
+                                ? 'border-blue-500 bg-blue-50'
+                                : 'border-gray-200 hover:bg-gray-50'
+                              }`}
+                            onClick={() => togglePos(position._id ?? '')}
+                          >
+                            <div className={`w-4 h-4 rounded border flex items-center justify-center ${form.posIds.includes(position._id ?? '')
+                                ? 'bg-blue-500 border-blue-500'
+                                : 'border-gray-300'
+                              }`}>
+                              {form.posIds.includes(position._id ?? '') && (
+                                <Check className="h-3 w-3 text-white" />
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-medium">{position.title}</p>
+                              <p className="text-sm text-gray-500">{position.description}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5" />
+                      <div>
+                        <p className="font-medium text-blue-900">Applicability Note</p>
+                        <p className="text-sm text-blue-700 mt-1">
+                          Only employees in selected departments and positions will be eligible
+                          for appraisal using this template. Leave all unchecked to make it
+                          applicable to all departments and positions.
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </Card>
-              ))}
+                </div>
+              </TabsContent>
+            </ScrollArea>
+          </Tabs>
 
-              {form.criteria.length === 0 && (
-                <p className="text-sm text-muted-foreground">No criteria added yet.</p>
-              )}
+          <DialogFooter className="border-t pt-4">
+            <div className="flex items-center justify-between w-full">
+              <div className="text-sm text-gray-500">
+                {form.criteria.length} criteria • {form.deptIds.length} departments • {form.posIds.length} positions
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setOpenDialog(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSave} className="gap-2">
+                  <Check className="h-4 w-4" />
+                  {editId ? 'Update Template' : 'Create Template'}
+                </Button>
+              </div>
             </div>
-          </ScrollArea>
-
-          {/* *******  SAVE BUTTON ALWAYS VISIBLE  ******* */}
-          <DialogFooter>
-            <Button onClick={save}>Save template</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

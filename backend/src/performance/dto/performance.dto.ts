@@ -7,6 +7,7 @@ import {
   AppraisalDisputeStatus,
   AppraisalRatingScaleType,
 } from '../enums/performance.enums';
+import { Transform } from 'class-transformer';
 
 // -------------------------
 // Rating / Template DTOs
@@ -228,17 +229,28 @@ export class AcknowledgeRecordDto {
 // -------------------------
 // Dispute DTOs
 // -------------------------
+// In performance.dto.ts
+// Create a custom decorator or interceptor
+
 export class RaiseDisputeDto {
-  @IsMongoId()
+  @IsString()
+  @IsNotEmpty()
+  @Transform(({ value }) => new Types.ObjectId(value))
   appraisalId: Types.ObjectId;
 
-  @IsMongoId()
+  @IsString()
+  @IsNotEmpty()
+  @Transform(({ value }) => new Types.ObjectId(value))
   assignmentId: Types.ObjectId;
 
-  @IsMongoId()
+  @IsString()
+  @IsNotEmpty()
+  @Transform(({ value }) => new Types.ObjectId(value))
   cycleId: Types.ObjectId;
 
-  @IsMongoId()
+  @IsString()
+  @IsNotEmpty()
+  @Transform(({ value }) => new Types.ObjectId(value))
   raisedByEmployeeId: Types.ObjectId;
 
   @IsString()
@@ -252,7 +264,8 @@ export class RaiseDisputeDto {
 
 export class ResolveDisputeDto {
   @IsMongoId()
-  resolvedBy: Types.ObjectId;
+  @IsString() // Add this validator
+  resolvedBy: string; // Change from Types.ObjectId to string
 
   @IsEnum(AppraisalDisputeStatus)
   status: AppraisalDisputeStatus;
@@ -260,4 +273,24 @@ export class ResolveDisputeDto {
   @IsOptional()
   @IsString()
   resolutionSummary?: string;
+}
+export class UpdateAppraisalRecordDto {
+  @IsOptional()
+  @IsArray()
+  ratings?: any[];
+  
+  @IsOptional()
+  totalScore?: number;
+  
+  @IsOptional()
+  overallRatingLabel?: string;
+  
+  @IsOptional()
+  managerSummary?: string;
+  
+  @IsOptional()
+  strengths?: string;
+  
+  @IsOptional()
+  improvementAreas?: string;
 }

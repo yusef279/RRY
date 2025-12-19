@@ -17,13 +17,16 @@ export interface AuthPayload {
   userId: string
   email: string
   role: UserRole
-  permissions?: string[] // <-- NEW
+  firstName?: string  // <-- Add this
+  lastName?: string   // <-- Add this
+  
+  // Keep only one permissions property
+  permissions?: string[]
 
   employeeId?: string
   departmentId?: string
   positionId?: string
   roles?: UserRole[]
-  permissions?: string[]
 
   exp?: number
 }

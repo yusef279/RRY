@@ -3,6 +3,9 @@ export interface Department {
   name: string
   code: string
   status?: 'ACTIVE' | 'INACTIVE'
+  employeeCount?: number; // Add this line
+    description?: string; // Add this line
+
 }
 
 export interface Position {
