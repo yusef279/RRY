@@ -46,7 +46,8 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     Permission.MANAGE_ALL_PROFILES,
     Permission.EDIT_OWN_PROFILE, // ← add this
     Permission.VIEW_ORG_STRUCTURE,
-    Permission.VIEW_OWN_APPRAISAL, // ← add this
+    Permission.VIEW_OWN_APPRAISAL,
+    Permission.CONDUCT_APPRAISALS,
     Permission.MANAGE_APPRAISALS,
     Permission.VIEW_APPRAISAL_DASHBOARD,
     Permission.EXPORT_APPRAISAL_REPORTS,

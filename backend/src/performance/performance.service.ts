@@ -174,11 +174,28 @@ export class PerformanceService {
     return this.cycleModel.find(query).exec();
   }
 
-  async getCycleById(id: string) {
-    const cycle = await this.cycleModel.findById(id);
-    if (!cycle) throw new NotFoundException('Cycle not found');
-    return cycle;
+// In your performance.service.ts - update the getCycleById method:
+
+async getCycleById(id: string) {
+  // Validate the ID format first
+  if (!id || typeof id !== 'string') {
+    throw new BadRequestException('Invalid cycle ID format');
   }
+
+  // Check if it's a valid MongoDB ObjectId
+  if (!Types.ObjectId.isValid(id)) {
+    throw new BadRequestException('Invalid cycle ID: must be a valid ObjectId');
+  }
+
+  const cycle = await this.cycleModel.findById(id).exec();
+  
+  if (!cycle) {
+    throw new NotFoundException(`Cycle with ID ${id} not found`);
+  }
+  
+  return cycle;
+}
+
 async updateCycle(id: string, dto: Partial<CreateCycleDto>) {
   const cycle = await this.cycleModel.findById(id);
   if (!cycle) {
@@ -434,16 +451,27 @@ async publishRecord(id: string, hrPublishedById?: string) {
     }
     return record.save();
   }
-async listRecords(query: any) {
-  const records = await this.recordModel
-    .find(query)
-    .populate(['cycleId', 'templateId', 'employeeProfileId', 'managerProfileId'])
-    .exec();
-  return records.length ? records : [];
-}
-// Update the service methods to work without the missing fields
-// Add these methods to your PerformanceService:
+// In your performance.service.ts - update the listRecords method
 
+async listRecords(query: any = {}) {
+  const mongoQuery: any = {};
+  
+  if (query.status) {
+    mongoQuery.status = query.status;
+  }
+  
+  const records = await this.recordModel
+    .find(mongoQuery)
+    .populate('employeeProfileId', 'firstName lastName employeeNumber department')
+    .populate('employeeProfileId.department', 'name code') // Add this to populate department details
+    .populate('managerProfileId', 'firstName lastName')
+    .populate('cycleId', 'name startDate')
+    .populate('templateId', 'name')
+    .sort({ hrPublishedAt: -1 })
+    .exec();
+    
+  return records;
+}
 /* =========================================================
       NEW: Assignment Update Methods (working without answers field)
   ========================================================= */
@@ -788,8 +816,6 @@ const disputeData = {
 
 // performance.service.ts - update resolveDispute method
 async resolveDispute(disputeId: string, resolutionData: any) {
-  console.log('🔧 [SERVICE] Resolve dispute called with ID:', disputeId);
-  console.log('📦 Resolution data:', JSON.stringify(resolutionData, null, 2));
   
   try {
     // ✅ 1. Validate dispute ID format
@@ -799,16 +825,13 @@ async resolveDispute(disputeId: string, resolutionData: any) {
     }
     
     const objectId = new Types.ObjectId(disputeId);
-    console.log('✅ Converted to ObjectId:', objectId);
     
     // ✅ 2. Find the dispute (try with and without populate)
     let dispute = await this.disputeModel.findById(objectId);
-    console.log('🔍 Raw dispute find result:', dispute ? 'FOUND' : 'NOT FOUND');
     
     if (!dispute) {
       // Try alternative lookup
       const allDisputesCount = await this.disputeModel.countDocuments({});
-      console.log('📊 Total disputes in database:', allDisputesCount);
       
       if (allDisputesCount > 0) {
         const sampleDispute = await this.disputeModel.findOne({});
@@ -864,13 +887,11 @@ async resolveDispute(disputeId: string, resolutionData: any) {
       throw new BadRequestException('HR employee not found');
     }
     
-    console.log('✅ HR employee found:', hrEmployee.firstName, hrEmployee.lastName);
     
     // ✅ 7. CRITICAL: Validate rating criteria against template max score
     if (resolutionData.status === AppraisalDisputeStatus.ADJUSTED && 
         resolutionData.updatedAppraisal?.ratings) {
       
-      console.log('📊 Validating adjusted ratings against template criteria...');
       
       // Get the original appraisal
       const originalAppraisal = await this.recordModel.findById(dispute.appraisalId);
@@ -879,31 +900,21 @@ async resolveDispute(disputeId: string, resolutionData: any) {
         throw new NotFoundException('Original appraisal record not found');
       }
       
-      console.log('✅ Found original appraisal:', originalAppraisal._id);
       
       // Get the template with criteria
       const template = await this.templateModel.findById(originalAppraisal.templateId);
       if (!template) {
-        console.error('❌ Template not found for appraisal:', originalAppraisal.templateId);
+        console.error(' Template not found for appraisal:', originalAppraisal.templateId);
         throw new NotFoundException('Template not found for this appraisal');
       }
       
-      console.log('✅ Found template:', {
-        id: template._id,
-        name: template.name,
-        hasCriteria: !!template.criteria,
-        criteriaCount: template.criteria?.length || 0,
-        ratingScale: template.ratingScale
-      });
       
       const templateCriteria = template.criteria || [];
       const updatedRatings = resolutionData.updatedAppraisal.ratings;
       
-      console.log('📋 Template criteria:', templateCriteria);
-      console.log('📋 Updated ratings:', updatedRatings);
       
       if (templateCriteria.length === 0) {
-        console.warn('⚠️ Template has no criteria defined');
+        console.warn(' Template has no criteria defined');
       }
       
       // Create a map for quick lookup
@@ -957,7 +968,7 @@ async resolveDispute(disputeId: string, resolutionData: any) {
           );
         }
         
-        console.log('✅ Rating validated:', {
+        console.log('Rating validated:', {
           criterion: criterion.title,
           rating: rating.ratingValue,
           max: maxAllowedScore,
@@ -965,10 +976,9 @@ async resolveDispute(disputeId: string, resolutionData: any) {
         });
       }
       
-      console.log('✅ All ratings validated against template criteria');
     }
     
-    // ✅ 8. Update dispute status
+    // 8. Update dispute status
     dispute.set('status', resolutionData.status);
     dispute.set('resolutionSummary', resolutionData.resolutionSummary.trim());
     dispute.set('resolvedByEmployeeId', resolvedByEmployeeId);
@@ -978,7 +988,6 @@ async resolveDispute(disputeId: string, resolutionData: any) {
     if (resolutionData.status === AppraisalDisputeStatus.ADJUSTED && 
         resolutionData.updatedAppraisal) {
       
-      console.log('🔄 Updating appraisal record with adjusted ratings...');
       
       const appraisal = await this.recordModel.findById(dispute.appraisalId);
       if (appraisal) {
@@ -995,17 +1004,15 @@ async resolveDispute(disputeId: string, resolutionData: any) {
         appraisal.set('updatedAt', new Date());
         
         await appraisal.save();
-        console.log('✅ Appraisal record updated with new ratings');
         
         // Also update assignment status if it was acknowledged
         const assignment = await this.assignmentModel.findById(appraisal.assignmentId);
         if (assignment && assignment.status === AppraisalAssignmentStatus.ACKNOWLEDGED) {
           assignment.status = AppraisalAssignmentStatus.PUBLISHED;
           await assignment.save();
-          console.log('✅ Assignment status reset from ACKNOWLEDGED to PUBLISHED');
         }
       } else {
-        console.error('❌ Appraisal not found for update:', dispute.appraisalId);
+        console.error(' Appraisal not found for update:', dispute.appraisalId);
       }
       
       // Store updated appraisal data in dispute
@@ -1019,19 +1026,13 @@ async resolveDispute(disputeId: string, resolutionData: any) {
           });
         }
       } catch (error) {
-        console.warn('⚠️ updatedAppraisal field not in schema, skipping');
+        console.warn('updatedAppraisal field not in schema, skipping');
       }
     }
     
-    // ✅ 10. Save the dispute
+    //  10. Save the dispute
     await dispute.save();
     
-    console.log('🎉 Dispute resolved successfully:', {
-      id: dispute._id,
-      newStatus: dispute.status,
-      resolvedBy: dispute.resolvedByEmployeeId,
-      resolvedAt: dispute.resolvedAt
-    });
     
     // ✅ 11. Populate before returning
     const populatedDispute = await this.disputeModel

@@ -40,7 +40,7 @@ import { AppraisalAssignmentStatus } from './enums/performance.enums'; // ADD TH
 @Controller('performance')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class PerformanceController {
-  constructor(private readonly service: PerformanceService) {}
+  constructor(private readonly service: PerformanceService) { }
 
   /* =========================================================
       Templates (Step 1 – HR Manager)
@@ -108,11 +108,11 @@ export class PerformanceController {
     return this.service.closeCycle(id);
   }
 
-@Put('cycles/:id')
-@Permissions(Permission.MANAGE_APPRAISALS)
-updateCycle(@Param('id') id: string, @Body() dto: Partial<CreateCycleDto>) {
-  return this.service.updateCycle(id, dto);
-}
+  @Put('cycles/:id')
+  @Permissions(Permission.MANAGE_APPRAISALS)
+  updateCycle(@Param('id') id: string, @Body() dto: Partial<CreateCycleDto>) {
+    return this.service.updateCycle(id, dto);
+  }
 
   @Post('cycles/:cycleId/reminders')
   @Permissions(Permission.MANAGE_APPRAISALS)
@@ -124,36 +124,36 @@ updateCycle(@Param('id') id: string, @Body() dto: Partial<CreateCycleDto>) {
       Assignments (Step 3A – HR Employee / Line Manager)
   ========================================================= */
   // Add this endpoint BEFORE or AFTER the other assignment endpoints
-@Get('assignments')
-@Permissions(Permission.MANAGE_APPRAISALS)
-getAssignments(
-  @Query('cycleId') cycleId?: string,
-  @Query('employeeId') employeeId?: string,
-  @Query('managerId') managerId?: string,
-  @Query('status') status?: string
-) {
-  return this.service.getAssignments({ 
-    cycleId, 
-    employeeId, 
-    managerId, 
-    status 
-  });
-}
-@Post('assignments/bulk')
-@Permissions(Permission.MANAGE_APPRAISALS)
-bulkAssign(@Body() dto: BulkAssignDto, @CurrentUser() user: AuthUser) { // ← added user
-  return this.service.bulkAssign(dto, user);
-}
-@Get('assignments/manager/my')
-@Permissions(Permission.CONDUCT_APPRAISALS)
-getMyAssignments(@CurrentUser() user: AuthUser) {
-  if (!user.employeeId) {
-    throw new ForbiddenException('User not linked to an employee profile');
+  @Get('assignments')
+  @Permissions(Permission.MANAGE_APPRAISALS)
+  getAssignments(
+    @Query('cycleId') cycleId?: string,
+    @Query('employeeId') employeeId?: string,
+    @Query('managerId') managerId?: string,
+    @Query('status') status?: string
+  ) {
+    return this.service.getAssignments({
+      cycleId,
+      employeeId,
+      managerId,
+      status
+    });
   }
-  return this.service.getAssignmentsForManager(user.employeeId);
-}
+  @Post('assignments/bulk')
+  @Permissions(Permission.MANAGE_APPRAISALS)
+  bulkAssign(@Body() dto: BulkAssignDto, @CurrentUser() user: AuthUser) { // ← added user
+    return this.service.bulkAssign(dto, user);
+  }
+  @Get('assignments/manager/my')
+  @Permissions(Permission.CONDUCT_APPRAISALS)
+  getMyAssignments(@CurrentUser() user: AuthUser) {
+    if (!user.employeeId) {
+      throw new ForbiddenException('User not linked to an employee profile');
+    }
+    return this.service.getAssignmentsForManager(user.employeeId);
+  }
 
-@Get('assignments/employee/:employeeId')
+  @Get('assignments/employee/:employeeId')
   @Permissions(Permission.VIEW_OWN_APPRAISAL)
   getAssignmentsForEmployee(
     @Param('employeeId') employeeId: string,
@@ -176,8 +176,8 @@ getMyAssignments(@CurrentUser() user: AuthUser) {
   @Permissions(Permission.CONDUCT_APPRAISALS)
   updateAssignment(
     @Param('id') id: string,
-    @Body() updateData: { 
-      answers?: any; 
+    @Body() updateData: {
+      answers?: any;
       status?: AppraisalAssignmentStatus;
       dueDate?: Date;
     },
@@ -237,11 +237,11 @@ getMyAssignments(@CurrentUser() user: AuthUser) {
   ) {
     return this.service.acknowledgeRecord(id, body.employeeId.toString(), body.comment, user);
   }
- @Get('records')
-@Permissions(Permission.MANAGE_APPRAISALS)
-listRecords(@Query() query: any) {
-  return this.service.listRecords(query);
-}
+  @Get('records')
+  @Permissions(Permission.MANAGE_APPRAISALS)
+  listRecords(@Query() query: any) {
+    return this.service.listRecords(query);
+  }
 
 
   /* =========================================================
@@ -265,21 +265,21 @@ listRecords(@Query() query: any) {
     return this.service.getDisputeById(id);
   }
 
-@Patch('disputes/:id/resolve')
-@Permissions(Permission.RESOLVE_DISPUTE)
-resolveDispute(@Param('id') id: string, @Body() body: ResolveDisputeDto) {
-  console.log('🎯 [CONTROLLER] Starting resolve for ID:', id);
-  return this.service.resolveDispute(id, body);
-}
-@Patch('records/:id')
-@UseGuards(PermissionsGuard)
-@Permissions(Permission.MANAGE_ALL_PROFILES)
-async updateAppraisalRecord(
-  @Param('id') id: string,
-  @Body() dto: UpdateAppraisalRecordDto,
-) {
-  return this.service.updateAppraisalRecord(id, dto);
-}
+  @Patch('disputes/:id/resolve')
+  @Permissions(Permission.RESOLVE_DISPUTE)
+  resolveDispute(@Param('id') id: string, @Body() body: ResolveDisputeDto) {
+    console.log('🎯 [CONTROLLER] Starting resolve for ID:', id);
+    return this.service.resolveDispute(id, body);
+  }
+  @Patch('records/:id')
+  @UseGuards(PermissionsGuard)
+  @Permissions(Permission.MANAGE_ALL_PROFILES)
+  async updateAppraisalRecord(
+    @Param('id') id: string,
+    @Body() dto: UpdateAppraisalRecordDto,
+  ) {
+    return this.service.updateAppraisalRecord(id, dto);
+  }
 
   /* =========================================================
       Reports / Dashboard (Step 4 – HR Manager)
@@ -360,18 +360,18 @@ async updateAppraisalRecord(
     ];
     const roles = [user.role, ...(user.roles ?? [])].filter(Boolean) as SystemRole[];
     return roles.some((r) => allowedRoles.includes(r));
- 
- }
- /* =========================================================
-    Missing route – always returns dispute (even resolved)
-========================================================= */
-@Get('disputes/appraisal/:appraisalId/employee/:employeeId')
-@Permissions(Permission.VIEW_OWN_APPRAISAL)   // or any permission you already import
-async getDisputeByAppraisalAndEmployee(
-  @Param('appraisalId') appraisalId: string,
-  @Param('employeeId')  employeeId: string,
-) {
-  // service returns null or the dispute document (any status)
-  return this.service.getDisputeByAppraisalAndEmployee(appraisalId, employeeId);
-}
+
+  }
+  /* =========================================================
+     Missing route – always returns dispute (even resolved)
+ ========================================================= */
+  @Get('disputes/appraisal/:appraisalId/employee/:employeeId')
+  @Permissions(Permission.VIEW_OWN_APPRAISAL)   // or any permission you already import
+  async getDisputeByAppraisalAndEmployee(
+    @Param('appraisalId') appraisalId: string,
+    @Param('employeeId') employeeId: string,
+  ) {
+    // service returns null or the dispute document (any status)
+    return this.service.getDisputeByAppraisalAndEmployee(appraisalId, employeeId);
+  }
 }

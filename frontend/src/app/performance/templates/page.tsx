@@ -141,9 +141,35 @@ export default function TemplatesPage() {
   }, [searchTerm, activeFilter, selectedType, templates]);
 
   /* ----------  TEMPLATE ACTIONS  ---------- */
-  const handleSave = async () => {
+  const handleSaveTemplate = async () => {
+    // Validation: Template name is required
     if (!form.name.trim()) {
       toast.error('Template name is required');
+      return;
+    }
+
+    // Validation: Check if criteria are filled
+    const invalidCriteria = form.criteria.filter(c => 
+      !c.title.trim() || // title is empty
+      (c.weight !== undefined && (c.weight < 0 || c.weight > 100)) || // invalid weight
+      (c.maxScore !== undefined && (c.maxScore < 1 || c.maxScore > SCALE_MAP[form.ratingType].max)) // invalid max score
+    );
+
+    if (form.criteria.length === 0) {
+      toast.error('Please add at least one evaluation criterion');
+      return;
+    }
+
+    if (invalidCriteria.length > 0) {
+      toast.error('Please fill in all required criterion fields and ensure values are valid');
+      return;
+    }
+
+    // Check for duplicate criterion titles
+    const criterionTitles = form.criteria.map(c => c.title.trim().toLowerCase());
+    const hasDuplicates = new Set(criterionTitles).size !== criterionTitles.length;
+    if (hasDuplicates) {
+      toast.error('Duplicate criterion titles found. Please use unique titles for each criterion.');
       return;
     }
 
@@ -155,7 +181,14 @@ export default function TemplatesPage() {
       instructions: form.instructions,
       applicableDepartmentIds: form.deptIds,
       applicablePositionIds: form.posIds,
-      criteria: form.criteria,
+      criteria: form.criteria.map(criterion => ({
+        ...criterion,
+        title: criterion.title.trim(),
+        details: criterion.details?.trim(),
+        weight: criterion.weight || 0,
+        maxScore: criterion.maxScore || SCALE_MAP[form.ratingType].max,
+        required: criterion.required !== false // default to true if not specified
+      })),
     };
 
     try {
@@ -669,6 +702,12 @@ export default function TemplatesPage() {
                     <p className="text-sm text-gray-500 mt-1">
                       Define the questions and metrics for performance evaluation
                     </p>
+                    {/* Validation message */}
+                    {form.criteria.length === 0 && (
+                      <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-700">
+                        ⚠️ At least one criterion is required. Click "Add Criterion" to get started.
+                      </div>
+                    )}
                   </div>
                   <Button onClick={addCriterion} className="gap-2">
                     <Plus className="h-4 w-4" />
@@ -677,96 +716,185 @@ export default function TemplatesPage() {
                 </div>
 
                 {form.criteria.length === 0 ? (
-                  <div className="text-center py-8 border-2 border-dashed rounded-lg">
+                  <div className="text-center py-8 border-2 border-dashed rounded-lg bg-gray-50">
                     <FileText className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                    <p className="text-gray-500">No criteria added yet</p>
-                    <p className="text-sm text-gray-400 mt-1">
-                      Add criteria to define what will be evaluated
+                    <p className="text-gray-500 font-medium">No criteria added yet</p>
+                    <p className="text-sm text-gray-400 mt-1 mb-4">
+                      Add criteria to define what will be evaluated. At least one criterion is required.
                     </p>
+                    <Button onClick={addCriterion} variant="outline">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Your First Criterion
+                    </Button>
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {form.criteria.map((criterion, idx) => (
-                      <Card key={criterion.key} className="border-l-4 border-l-blue-500">
-                        <CardContent className="p-4">
-                          <div className="flex items-start justify-between mb-4">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className="font-medium text-gray-900">Criterion {idx + 1}</span>
-                                {criterion.required && (
-                                  <Badge variant="outline" className="text-xs">Required</Badge>
-                                )}
+                    {/* Validation summary */}
+                    {form.criteria.some(c => !c.title.trim()) && (
+                      <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                        <div className="flex items-center gap-2 text-red-700">
+                          <AlertCircle className="h-4 w-4" />
+                          <span className="text-sm font-medium">Some criteria are incomplete:</span>
+                        </div>
+                        <ul className="text-sm text-red-600 mt-1 ml-6 list-disc">
+                          {form.criteria.map((c, idx) => !c.title.trim() && (
+                            <li key={c.key}>Criterion {idx + 1} needs a title</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {form.criteria.map((criterion, idx) => {
+                      const isInvalid = !criterion.title.trim();
+                      
+                      return (
+                        <Card 
+                          key={criterion.key} 
+                          className={`border-l-4 ${isInvalid ? 'border-l-red-500 bg-red-50/50' : 'border-l-blue-500'}`}
+                        >
+                          <CardContent className="p-4">
+                            <div className="flex items-start justify-between mb-4">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span className={`font-medium ${isInvalid ? 'text-red-700' : 'text-gray-900'}`}>
+                                    Criterion {idx + 1}
+                                  </span>
+                                  {isInvalid && (
+                                    <Badge variant="outline" className="text-xs bg-red-100 text-red-700 border-red-200">
+                                      Incomplete
+                                    </Badge>
+                                  )}
+                                  {criterion.required && !isInvalid && (
+                                    <Badge variant="outline" className="text-xs">Required</Badge>
+                                  )}
+                                </div>
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div>
+                                    <div className="flex items-center gap-1">
+                                      <Label>Question *</Label>
+                                      {isInvalid && (
+                                        <span className="text-xs text-red-500">(Required)</span>
+                                      )}
+                                    </div>
+                                    <Input
+                                      value={criterion.title}
+                                      onChange={(e) => updateCriterion(idx, 'title', e.target.value)}
+                                      placeholder="e.g., Communication Skills"
+                                      className={`mt-1 ${isInvalid ? 'border-red-300 focus-visible:ring-red-300' : ''}`}
+                                    />
+                                    {isInvalid && (
+                                      <p className="text-xs text-red-500 mt-1">
+                                        Please enter a question for this criterion
+                                      </p>
+                                    )}
+                                  </div>
+                                  
+                                  <div>
+                                    <Label>Details & Examples</Label>
+                                    <Textarea
+                                      value={criterion.details}
+                                      onChange={(e) => updateCriterion(idx, 'details', e.target.value)}
+                                      placeholder="Description or examples for guidance"
+                                      className="mt-1"
+                                      rows={2}
+                                    />
+                                  </div>
+                                  
+                                  <div>
+                                    <div className="flex items-center gap-1">
+                                      <Label>Weight (%) *</Label>
+                                    </div>
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      max={100}
+                                      value={criterion.weight}
+                                      onChange={(e) => updateCriterion(idx, 'weight', Number(e.target.value))}
+                                      className="mt-1"
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      Determines importance in final score calculation
+                                    </p>
+                                  </div>
+                                  
+                                  <div>
+                                    <div className="flex items-center gap-1">
+                                      <Label>Max Score *</Label>
+                                    </div>
+                                    <Input
+                                      type="number"
+                                      min={1}
+                                      max={SCALE_MAP[form.ratingType].max}
+                                      value={criterion.maxScore}
+                                      onChange={(e) => updateCriterion(idx, 'maxScore', Number(e.target.value))}
+                                      className="mt-1"
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      Maximum points (scale: {SCALE_MAP[form.ratingType].min}-{SCALE_MAP[form.ratingType].max})
+                                    </p>
+                                  </div>
+                                </div>
                               </div>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                  <Label>Question *</Label>
-                                  <Input
-                                    value={criterion.title}
-                                    onChange={(e) => updateCriterion(idx, 'title', e.target.value)}
-                                    placeholder="e.g., Communication Skills"
-                                    className="mt-1"
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="ml-2 text-red-500 hover:text-red-600 hover:bg-red-50"
+                                onClick={() => removeCriterion(idx)}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                            
+                            <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                              <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-2">
+                                  <Switch
+                                    checked={criterion.required}
+                                    onCheckedChange={(checked) => updateCriterion(idx, 'required', checked)}
                                   />
+                                  <Label className="text-sm">Required field</Label>
                                 </div>
-                                <div>
-                                  <Label>Details & Examples</Label>
-                                  <Textarea
-                                    value={criterion.details}
-                                    onChange={(e) => updateCriterion(idx, 'details', e.target.value)}
-                                    placeholder="Description or examples for guidance"
-                                    className="mt-1"
-                                    rows={2}
-                                  />
-                                </div>
-                                <div>
-                                  <Label>Weight (%)</Label>
-                                  <Input
-                                    type="number"
-                                    min={0}
-                                    max={100}
-                                    value={criterion.weight}
-                                    onChange={(e) => updateCriterion(idx, 'weight', Number(e.target.value))}
-                                    className="mt-1"
-                                  />
-                                </div>
-                                <div>
-                                  <Label>Max Score</Label>
-                                  <Input
-                                    type="number"
-                                    min={1}
-                                    max={SCALE_MAP[form.ratingType].max}
-                                    value={criterion.maxScore}
-                                    onChange={(e) => updateCriterion(idx, 'maxScore', Number(e.target.value))}
-                                    className="mt-1"
-                                  />
-                                </div>
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                Weight: {criterion.weight || 0}% • Max: {criterion.maxScore || 0} points
                               </div>
                             </div>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="ml-2 text-red-500 hover:text-red-600 hover:bg-red-50"
-                              onClick={() => removeCriterion(idx)}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+
+                    {/* Total weight indicator */}
+                    {form.criteria.length > 0 && (
+                      <div className="p-4 border rounded-lg bg-gray-50">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-medium">Total Weight</p>
+                            <p className="text-sm text-gray-500">
+                              Sum of all criterion weights should ideally equal 100%
+                            </p>
                           </div>
-                          <div className="flex items-center justify-between mt-4 pt-4 border-t">
-                            <div className="flex items-center gap-4">
-                              <div className="flex items-center gap-2">
-                                <Switch
-                                  checked={criterion.required}
-                                  onCheckedChange={(checked) => updateCriterion(idx, 'required', checked)}
-                                />
-                                <Label className="text-sm">Required field</Label>
-                              </div>
-                            </div>
-                            <div className="text-sm text-gray-500">
-                              Weight: {criterion.weight || 0}% • Max: {criterion.maxScore || 0} points
-                            </div>
+                          <div className="text-right">
+                            <p className={`text-lg font-bold ${
+                              form.criteria.reduce((sum, c) => sum + (c.weight || 0), 0) === 100 
+                                ? 'text-green-600' 
+                                : 'text-amber-600'
+                            }`}>
+                              {form.criteria.reduce((sum, c) => sum + (c.weight || 0), 0)}%
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              {form.criteria.length} criteria
+                            </p>
                           </div>
-                        </CardContent>
-                      </Card>
-                    ))}
+                        </div>
+                        {form.criteria.reduce((sum, c) => sum + (c.weight || 0), 0) !== 100 && (
+                          <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-sm text-amber-700">
+                            ⚠️ Total weight is not 100%. Scores will be normalized proportionally.
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </TabsContent>
@@ -866,14 +994,37 @@ export default function TemplatesPage() {
 
           <DialogFooter className="border-t pt-4">
             <div className="flex items-center justify-between w-full">
-              <div className="text-sm text-gray-500">
-                {form.criteria.length} criteria • {form.deptIds.length} departments • {form.posIds.length} positions
+              <div>
+                <div className="text-sm text-gray-500">
+                  {form.criteria.length} criteria • {form.deptIds.length} departments • {form.posIds.length} positions
+                </div>
+                {/* Validation status */}
+                {form.criteria.length === 0 ? (
+                  <div className="text-sm text-red-500 font-medium flex items-center gap-1 mt-1">
+                    <AlertCircle className="h-4 w-4" />
+                    Add at least one criterion
+                  </div>
+                ) : form.criteria.some(c => !c.title.trim()) ? (
+                  <div className="text-sm text-red-500 font-medium flex items-center gap-1 mt-1">
+                    <AlertCircle className="h-4 w-4" />
+                    Some criteria are incomplete
+                  </div>
+                ) : (
+                  <div className="text-sm text-green-500 font-medium flex items-center gap-1 mt-1">
+                    <Check className="h-4 w-4" />
+                    All criteria are filled
+                  </div>
+                )}
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setOpenDialog(false)}>
                   Cancel
                 </Button>
-                <Button onClick={handleSave} className="gap-2">
+                <Button 
+                  onClick={handleSaveTemplate} 
+                  className="gap-2"
+                  disabled={form.criteria.length === 0 || form.criteria.some(c => !c.title.trim())}
+                >
                   <Check className="h-4 w-4" />
                   {editId ? 'Update Template' : 'Create Template'}
                 </Button>
